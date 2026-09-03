@@ -1,0 +1,41 @@
+{
+  "version": "0.1.0",
+  "chunks": [
+    {
+      "id": "likec4-kb.syntax-overview",
+      "title": "Обзор синтаксиса LikeC4",
+      "tags": ["syntax", "overview"],
+      "file": "syntax-overview.md"
+    },
+    {
+      "id": "likec4-kb.specification-block",
+      "title": "Блок specification: пользовательские типы элементов и связей",
+      "tags": ["syntax", "specification", "custom-kinds"],
+      "file": "specification-block.md"
+    },
+    {
+      "id": "likec4-kb.model-and-relationships",
+      "title": "Блок model: элементы, вложенность, связи",
+      "tags": ["syntax", "model", "relationships"],
+      "file": "model-and-relationships.md"
+    },
+    {
+      "id": "likec4-kb.views-and-dynamic-views",
+      "title": "Views и dynamic views (sequence-диаграммы)",
+      "tags": ["syntax", "views", "dynamic-view", "sequence"],
+      "file": "views-and-dynamic-views.md"
+    },
+    {
+      "id": "likec4-kb.metadata-and-tags",
+      "title": "Metadata и tags у элементов и связей",
+      "tags": ["syntax", "metadata", "tags"],
+      "file": "metadata-and-tags.md"
+    },
+    {
+      "id": "likec4-kb.extending-existing-models",
+      "title": "Как расширять существующую модель, не создавая дубликатов",
+      "tags": ["best-practices", "incremental-change"],
+      "file": "extending-existing-models.md"
+    }
+  ]
+}

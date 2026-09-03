@@ -1,5 +1,5 @@
 import type { UserFacingError } from '@likec4-ai/core-domain';
-import type { ProjectDetailResponse, ProjectRecord } from './types';
+import type { ArchitectureRule, ProjectDetailResponse, ProjectRecord } from './types';
 
 /**
  * Любая ошибка API долетает до компонентов либо как реальный UserFacingError
@@ -19,7 +19,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(path, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      // Content-Type только когда реально есть тело — иначе Fastify отвергает
+      // пустое DELETE-тело с этим заголовком как FST_ERR_CTP_EMPTY_JSON_BODY.
+      headers: { ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers },
     });
   } catch {
     throw new ApiError({
@@ -59,4 +61,24 @@ export function getProject(id: string): Promise<ProjectDetailResponse> {
 
 export function createProject(input: { name: string; description?: string; localRepositoryPath: string }): Promise<ProjectRecord> {
   return request('/api/projects', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function listArchitectureRules(projectId: string): Promise<ArchitectureRule[]> {
+  return request(`/api/projects/${projectId}/architecture-rules`);
+}
+
+export function createArchitectureRule(projectId: string, input: Omit<ArchitectureRule, 'id'>): Promise<ArchitectureRule> {
+  return request(`/api/projects/${projectId}/architecture-rules`, { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateArchitectureRule(
+  projectId: string,
+  ruleId: string,
+  patch: Partial<Omit<ArchitectureRule, 'id'>>,
+): Promise<ArchitectureRule> {
+  return request(`/api/projects/${projectId}/architecture-rules/${ruleId}`, { method: 'PATCH', body: JSON.stringify(patch) });
+}
+
+export function deleteArchitectureRule(projectId: string, ruleId: string): Promise<void> {
+  return request(`/api/projects/${projectId}/architecture-rules/${ruleId}`, { method: 'DELETE' });
 }

@@ -7,6 +7,7 @@ import { loadConfig } from './config.js';
 import { createAppContainer } from './composition-root.js';
 import { registerHealthRoute } from './routes/health.js';
 import { registerProjectRoutes } from './routes/projects.js';
+import { registerArchitectureRuleRoutes } from './routes/architecture-rules.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -18,6 +19,7 @@ async function main(): Promise<void> {
 
   await registerHealthRoute(app, container);
   await registerProjectRoutes(app, container);
+  await registerArchitectureRuleRoutes(app, container);
 
   // Продакшен (`npm start`): раздаём собранный web SPA из того же процесса
   // (ФТ28 — единый локальный процесс). В dev-режиме `npm run dev` поднимает

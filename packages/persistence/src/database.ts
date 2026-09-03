@@ -32,6 +32,32 @@ export async function openDatabase(dbFilePath: string): Promise<DatabaseSync> {
       file_hashes TEXT NOT NULL,
       storage_ref TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS architecture_rules (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      applies_to_kinds TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      required_metadata TEXT,
+      naming_convention_pattern TEXT,
+      examples TEXT,
+      severity TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_architecture_rules_project ON architecture_rules(project_id);
+
+    CREATE TABLE IF NOT EXISTS knowledge_chunks (
+      id TEXT NOT NULL,
+      scope_key TEXT NOT NULL,
+      source TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      tags TEXT NOT NULL,
+      metadata TEXT NOT NULL,
+      embedding TEXT NOT NULL,
+      PRIMARY KEY (scope_key, id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_scope ON knowledge_chunks(scope_key);
   `);
   return db;
 }

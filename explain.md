@@ -117,3 +117,45 @@ Project setup UI + Settings + SnapshotStore: экраны Create Project / Proje
 ### Следующий шаг — Milestone 3
 
 Knowledge Bases & Architecture Rules: `knowledge-global`, `knowledge-project`, `EmbeddingProvider` (отдельный от `LLMProvider` порт для эмбеддингов — уже определён в `core-domain`, реализации ещё нет), CRUD для Architecture Rules. Понадобится решить, каким эмбеддинг-провайдером закрыть MVP (OpenAI embeddings, раз LLM провайдер по умолчанию — OpenAI) и как хранить векторный индекс без внешней vector DB (по плану — достаточно brute-force cosine similarity поверх SQLite/JSON при таком объёме данных).
+
+---
+
+## Milestone 3 — Knowledge Bases & Architecture Rules
+
+### Главное отступление от буквального DoD плана — и почему это не срыв, а честная поправка порядка milestones
+
+DoD плана для Milestone 3 говорит: "Project KB **автоматически переиндексируется** при парсинге модели". Реализовать это буквально значило бы вызывать `EmbeddingProvider.embed()` (то есть реальный сетевой запрос к OpenAI) при каждом открытии `GET /api/projects/:id` — а Settings для ввода AI provider/API key появляются только в Milestone 6. То есть план в своём порядке milestones не учёл, что Knowledge Base зависит от готового `EmbeddingProvider`, который зависит от готового AI Settings UI.
+
+Решение: реализовал и полностью протестировал всю инфраструктуру Knowledge Base (embedding index, global/project providers, реальный контент) как rock-solid библиотечный код через порт `EmbeddingProvider` — но **не стал** дёргать реальный `OpenAIEmbeddingProvider` из живого роута `GET /api/projects/:id`. Как только в Milestone 6 появится способ сохранить API key через UI, `ProjectKnowledgeProvider.reindexFromGraph(...)` вызывается одной строчкой сразу после `likec4Parser.parseProject(...)` в существующем роуте — переделывать ничего не придётся, контракт уже готов и покрыт тестами. Это тот же паттерн, что уже был в Milestone 1→2 (адаптеры сначала как протестированная библиотека, потом подключение к живому UI, когда для него появляется естественный повод) — здесь просто более явный пример того, почему это правило работает.
+
+Architecture Rules CRUD, наоборот, **не имеет** такой зависимости (не нужны эмбеддинги вообще) — поэтому эта часть Milestone 3 полностью живая и проверена в браузере, как в предыдущих milestones.
+
+### Технологические решения
+
+**`node:sqlite` брутфорс cosine similarity вместо внешней vector DB.** Прямая реализация рекомендации плана. При объёме "один проект + одна общая KB" (десятки-сотни chunks) полный перебор в JS на каждый search быстрее по факту, чем сетевой round-trip к внешней vector DB, и не требует поднимать/настраивать ещё один сервис для локального однопользовательского инструмента.
+
+**Контент LikeC4 Knowledge Base — файлы в `content/` + `manifest.json`, не хардкод в TS.** Прямое следствие ФТ3 ("должна обновляться независимо от версии приложения"): контент физически отделён от кода пакета, у него своя версия в manifest. Написал 6 реальных чанков (обзор синтаксиса, specification, model/relationships через `extend`, views/dynamic views, metadata/tags, best practices по расширению модели без дублей) — не исчерпывающая база, а стартовый набор, который предполагается пополнять со временем, как и задумано ФТ3.
+
+**`KnowledgeChunk` в core-domain дополнен полем `tags: string[]`.** В исходном плане `KnowledgeQuery.tags` подразумевал фильтрацию, но у `KnowledgeChunk` не было явного поля для этого (только generic `metadata`). Вынес `tags` в отдельное поле first-class — не пряча механизм фильтрации внутри неструктурированного `metadata`.
+
+**`SqliteEmbeddingIndex`: `replaceAll` (полная перезапись) vs `upsert` (точечно) vs `replaceByIdPrefixes` (гибрид).** Изначально написал только `replaceAll` — и почти протащил в `ProjectKnowledgeProvider` баг: полная перезапись индекса при каждой переиндексации графа стёрла бы вручную добавленные пользователем заметки (`upsert`), которых нет в самом графе. Поймал это при проектировании `reindexFromGraph`, до написания тестов, а не после бага в проде. Исправление — `replaceByIdPrefixes(['element:', 'rule:'], chunks)`: удаляет только устаревшие авто-производные chunks (по префиксу id), не трогая записи с другими id. Покрыто тестом `replaceByIdPrefixes drops stale auto-derived chunks but preserves manually added ones`.
+
+### Обнаруженный и исправленный баг: коллизия `id` между чанками разных проектов
+
+Первая версия схемы `knowledge_chunks` объявляла `id TEXT PRIMARY KEY` — то есть id должен был быть уникален **глобально по всей таблице**, а не в пределах одного `scopeKey`. Поскольку id чанков строятся детерминированно из доменных данных (`element:${elementId}`, `rule:${ruleId}`), два разных проекта с элементом `orderService` неизбежно дали бы одинаковый id `element:orderService` — и `upsert`/`ON CONFLICT` тихо перезаписал бы chunk одного проекта данными другого, ломая изоляцию между проектами. Поймал это до того, как написал первый тест на multi-project сценарий (не через баг-репорт, а просто задав себе вопрос "а что если у двух проектов одинаковый id элемента?"), исправил на составной `PRIMARY KEY (scope_key, id)` и сразу закрепил регрессионным тестом (`the same chunk id in two different scopes does not collide`).
+
+### Найденный и исправленный баг в уже существующем (Milestone 2) UI при живой проверке
+
+При проверке Architecture Rules CRUD в браузере кнопка "Удалить" не работала — DELETE-запрос падал с `400 FST_ERR_CTP_EMPTY_JSON_BODY`. Причина жила в `apps/web/src/api/client.ts` ещё с Milestone 2: общий `request()` хелпер всегда добавлял заголовок `Content-Type: application/json`, даже когда тела запроса нет (DELETE) — Fastify по умолчанию отвергает пустое тело с этим заголовком. Юнит-тесты этого не поймали бы (они не гоняют реальный HTTP через настоящий Fastify) — только визуальная проверка в браузере, которую делаю по требованию для любых фронтенд-изменений. Исправлено: `Content-Type` теперь ставится только когда есть `init.body`. Это подтверждает практическую пользу правила "всегда проверять UI в браузере, а не только типами/юнит-тестами" — этот конкретный баг был бы незаметен до первого реального клика пользователя.
+
+### Что реализовано и как проверено
+
+- **`packages/persistence`**: `SqliteArchitectureRuleStore` (CRUD, скоуп по projectId), `SqliteEmbeddingIndex` (`replaceAll`/`upsert`/`replaceByIdPrefixes`/`search` с cosine similarity и tag-фильтром). +11 тестов (20 итого в пакете).
+- **`packages/llm-openai`**: `OpenAIEmbeddingProvider` — реальный HTTP-клиент к OpenAI Embeddings API, `fetchImpl` инжектируется для тестов без сети/ключа. Тесты проверяют, что ключ уходит только в заголовок запроса и никогда не попадает в текст ошибки.
+- **`packages/knowledge-global`**: `GlobalKnowledgeProvider` + 6 реальных markdown-чанков про синтаксис LikeC4. Ленивая индексация (не пересчитывает эмбеддинги на каждый старт, пока контент не пуст). Тесты используют детерминированный fake-embedding-provider (bag-of-words хеширование) — реальный поиск по реальному контенту, без сети.
+- **`packages/knowledge-project`**: `ProjectKnowledgeProvider.reindexFromGraph(graph, rules)` — индексирует элементы графа и Architecture Rules; тест напрямую проверяет DoD-требование "rules фильтруются по kind в поиске" через `tags`.
+- **Architecture Rules — полностью живая часть**: backend (`GET/POST/PATCH/DELETE /api/projects/:id/architecture-rules`) + экран `/projects/:id/architecture-rules` (список, форма создания/редактирования, удаление). Проверено в браузере: создание правила → редактирование severity → удаление, все три шага подтверждены реальными скриншотами.
+
+### Следующий шаг — Milestone 4
+
+Confluence Adapter + Bitbucket Adapter (read-only), Server/DC, PAT-авторизация. Понадобится реальная тестовая страница Confluence Server для проверки разбора storage-format (риск №4 из плана) — стоит запросить у пользователя доступ пораньше, а не откладывать до конца milestone.

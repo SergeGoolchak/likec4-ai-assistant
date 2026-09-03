@@ -11,6 +11,8 @@ export interface KnowledgeChunk {
   source: KnowledgeSource;
   title: string;
   content: string;
+  /** Используются для точной фильтрации в KnowledgeQuery.tags (например, по applicable kind правила) — отдельно от смысловой similarity-релевантности. */
+  tags: string[];
   /** Оценка релевантности, заполняется после retrieval — отсутствует при прямом чтении через getById. */
   score?: number;
   metadata: Record<string, unknown>;

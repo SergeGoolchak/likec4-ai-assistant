@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, getProject } from '../api/client';
 import { Card } from '../components/Card';
@@ -20,9 +20,19 @@ export function ProjectDashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-slate-900">{project.name}</h1>
-      {project.description && <p className="mt-1 text-slate-500">{project.description}</p>}
-      <p className="mt-2 text-xs text-slate-400">{project.localRepositoryPath}</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">{project.name}</h1>
+          {project.description && <p className="mt-1 text-slate-500">{project.description}</p>}
+          <p className="mt-2 text-xs text-slate-400">{project.localRepositoryPath}</p>
+        </div>
+        <Link
+          to={`/projects/${project.id}/architecture-rules`}
+          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Architecture Rules
+        </Link>
+      </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Элементы" value={model?.elementCount} />

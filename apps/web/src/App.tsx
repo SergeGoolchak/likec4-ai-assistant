@@ -3,6 +3,7 @@ import { Layout } from './components/Layout';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { CreateProjectPage } from './pages/CreateProjectPage';
 import { ProjectDashboardPage } from './pages/ProjectDashboardPage';
+import { ArchitectureRulesPage } from './pages/ArchitectureRulesPage';
 
 export function App() {
   return (
@@ -11,6 +12,7 @@ export function App() {
         <Route path="/" element={<ProjectsPage />} />
         <Route path="/projects/new" element={<CreateProjectPage />} />
         <Route path="/projects/:id" element={<ProjectDashboardPage />} />
+        <Route path="/projects/:id/architecture-rules" element={<ArchitectureRulesPage />} />
       </Route>
     </Routes>
   );

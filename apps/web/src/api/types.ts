@@ -1,4 +1,4 @@
-export type { ProjectRecord, LikeC4Diagnostic, UserFacingError } from '@likec4-ai/core-domain';
+export type { ProjectRecord, LikeC4Diagnostic, UserFacingError, ArchitectureRule } from '@likec4-ai/core-domain';
 
 export interface ProjectModelSummary {
   elementCount: number;
