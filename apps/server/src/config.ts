@@ -10,6 +10,8 @@ export interface AppConfig {
    * с шифротекстом, который он защищает (риск №5 из плана).
    */
   secretsKeyFilePath: string;
+  dbFilePath: string;
+  snapshotsRootDir: string;
 }
 
 export function loadConfig(): AppConfig {
@@ -20,5 +22,7 @@ export function loadConfig(): AppConfig {
     dataDir,
     secretsFilePath: join(dataDir, 'secrets.enc'),
     secretsKeyFilePath: join(keyDir, 'vault.key'),
+    dbFilePath: join(dataDir, 'app.db'),
+    snapshotsRootDir: join(dataDir, 'snapshots'),
   };
 }

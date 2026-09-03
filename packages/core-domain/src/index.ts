@@ -12,6 +12,7 @@ export * from './models/snapshot.js';
 export * from './models/knowledge.js';
 export * from './models/llm.js';
 export * from './models/session.js';
+export * from './models/project.js';
 
 // Порты
 export * from './ports/secrets-vault.js';
@@ -23,3 +24,4 @@ export * from './ports/knowledge-provider.js';
 export * from './ports/change-engine.js';
 export * from './ports/documentation-engine.js';
 export * from './ports/persistence.js';
+export * from './ports/project-store.js';
