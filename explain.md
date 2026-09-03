@@ -86,3 +86,34 @@ LikeC4 Parser/Validator + LocalRepositoryAdapter + Architecture Graph.
 ### Следующий шаг — Milestone 2
 
 Project setup UI + Settings + SnapshotStore: экраны Create Project / Project Dashboard / Settings (Local repo), плюс `SnapshotStore` (create/restore) — переиспользующий тот же паттерн атомарной записи, что уже обкатан в `LocalRepositoryAdapter.writeFiles`. После этого впервые можно будет через UI указать локальную папку и увидеть в браузере реально распарсенную модель и её диагностики — что даст возможность тестировать Diff/Preview/Apply на синтетических Proposal ещё до готовности LLM-цепочки, как и задумано порядком roadmap.
+
+---
+
+## Milestone 2 — Project setup UI + Settings + SnapshotStore
+
+### Технологические решения и почему именно так
+
+**`node:sqlite` вместо `better-sqlite3`.** Проверил на месте: в Node 24 встроенный модуль `node:sqlite` (`DatabaseSync`) работает без экспериментальных флагов и без нативной пересборки. План рекомендовал "SQLite + FS" для персистентности, не называя конкретную библиотеку — выбор builtin-модуля вместо стороннего нативного аддона снижает поверхность зависимостей (важно для локального инструмента, который должен просто `npm install`-иться на любой машине пользователя без toolchain для нативных модулей) и был первым, что стоило проверить перед тем как тянуть внешний пакет. `@types/node@22.20.1` уже содержит типы для него.
+
+**`ProjectRecord`/`ProjectStore` — минимальная модель, без полей под Confluence/Bitbucket/AI provider.** Экран Create Project по ФТ (раздел 10.2) в итоге должен спрашивать про Confluence, repository (Bitbucket или Local), AI provider/model — но эти интеграции появляются в Milestone 4 и 6. Заводить сейчас пустые опциональные поля под них означало бы проектировать модель под ещё не реализованный функционал. Добавлю их в `ProjectRecord`, когда до соответствующих milestones дойдёт очередь — это дешевле, чем поддерживать преждевременно широкий интерфейс.
+
+**`SnapshotStore` хранит физическую копию файлов + манифест sha256 в SQLite, без content-addressable дедупликации.** В более раннем черновом дизайне (от Plan-агента, ещё на этапе планирования) упоминалась идея content-addressable store, чтобы не дублировать неизменные файлы между снапшотами. Для MVP-масштаба (единичный локальный проект, снапшоты создаются только перед Apply) это преждевременная оптимизация — простое копирование файлов проще, надёжнее и его легче тестировать на побайтовое соответствие. Если объём снапшотов на реальных проектах окажется проблемой, дедупликацию можно добавить позже, не меняя контракт `SnapshotStore`.
+
+**Разделение "создать копию" и "применить копию".** `SnapshotStore.restore()` только возвращает `RepositoryFile[]` из сохранённой копии — запись обратно в реальный проект выполняет `RepositoryAdapter.writeFiles()` (уже с его атомарной двухфазной записью из Milestone 1). Это два independent concerns: SnapshotStore не обязан знать про конкретный repository adapter, а Apply/Rollback (Milestone 10) будет просто комбинировать оба примитива.
+
+**Composition root получил фабрику `createLocalRepositoryAdapter(rootDir)` вместо того, чтобы роуты сами делали `new LocalRepositoryAdapter(...)`.** Прямое следствие принципа, уже зафиксированного в JSDoc `composition-root.ts` с Milestone 0 ("роуты никогда не создают адаптеры напрямую") — раньше это была декларация на будущее, теперь первый реальный кейс, где это правило применено.
+
+### Что реализовано и как проверено
+
+- **`packages/persistence`**: `SqliteProjectStore` (CRUD над проектами) и `FsSnapshotStore` (create/restore/list снапшотов). 9 тестов, включая прямую проверку требования из DoD плана — "восстановить snapshot и проверить побайтовое соответствие файлов" (`restore returns files byte-for-byte identical to what was snapshotted`).
+- **Backend**: `POST/GET /api/projects`, `GET /api/projects/:id` — последний реально парсит LikeC4-модель через `likec4-adapter` и возвращает сводку (число элементов/связей/views + диагностику). Ни один эндпоинт не отдаёт сырую ошибку — только `UserFacingError` в теле ответа (title/likelyCause/suggestedAction), в соответствии с ФТ19.
+- **Frontend**: экраны Projects (список), Create Project (форма), Project Dashboard (сводка модели + список диагностик или сообщение "модель валидна"). React Router + TanStack Query. Общий `ErrorState` компонент — единственное место в UI, рендерящее ошибки, принимает только `UserFacingError`.
+- **End-to-end проверка в браузере** (не только юнит-тесты): создал реальный тестовый LikeC4-проект (`system` с двумя `service` и `database`, две связи, один view), прогнал через UI — dashboard корректно показал 4 элемента / 2 связи / 1 view и "Модель валидна, ошибок не найдено". Отдельно проверил error-state, указав несуществующую папку — сообщение понятное, без "Error 500".
+
+### Отход от плана
+
+Экраны Project Settings (раздел 10.4 ФТ, включая General/Confluence/Repository/AI/LikeC4/Knowledge/Architecture Rules) в явном виде из плана Milestone 2 включали только "Settings (Local repo)". Реализовал создание проекта с локальным путём прямо на экране Create Project (что уже покрывает "General" + "Repository: Local" в достаточном для DoD объёме) и отложил отдельный экран Settings как таковой — редактировать `localRepositoryPath` после создания пока негде. Это сознательно узкий скоуп: полноценный Settings UI с разделами появится, когда в проекте реально будет что настраивать помимo самого пути (Confluence — M4, AI provider — M6, Knowledge/Rules — M3) — заводить пустую страницу настроек с одним полем сейчас было бы преждевременной UI-структурой.
+
+### Следующий шаг — Milestone 3
+
+Knowledge Bases & Architecture Rules: `knowledge-global`, `knowledge-project`, `EmbeddingProvider` (отдельный от `LLMProvider` порт для эмбеддингов — уже определён в `core-domain`, реализации ещё нет), CRUD для Architecture Rules. Понадобится решить, каким эмбеддинг-провайдером закрыть MVP (OpenAI embeddings, раз LLM провайдер по умолчанию — OpenAI) и как хранить векторный индекс без внешней vector DB (по плану — достаточно brute-force cosine similarity поверх SQLite/JSON при таком объёме данных).

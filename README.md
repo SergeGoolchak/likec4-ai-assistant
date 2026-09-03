@@ -27,6 +27,7 @@ npm start
 - `packages/secrets` — локальное шифрованное хранилище API-ключей/токенов.
 - `packages/likec4-adapter` — `LikeC4Parser`/`LikeC4Validator` поверх официального npm-пакета `likec4`: построение `ArchitectureGraph`, техническая валидация, рендер views в SVG.
 - `packages/repo-local-adapter` — `LocalRepositoryAdapter`: чтение/атомарная запись `.c4`/`.likec4` файлов локальной папки, определение git branch/commit.
+- `packages/persistence` — `SqliteProjectStore` и `FsSnapshotStore` поверх встроенного `node:sqlite`: проекты, снапшоты для отката перед Apply.
 
 ## Проверка
 
