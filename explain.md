@@ -56,3 +56,33 @@ LikeC4 Parser/Validator + LocalRepositoryAdapter + Architecture Graph.
 3. Реалистичность экспорта view в SVG без Playwright/CLI — то есть до какой степени `./react`-компонент можно рендерить headless на сервере (например, через `react-dom/server`) для `renderViewsPreview`, либо стоит ли эту функцию вообще выполнять на клиенте (в браузере, где `./react` компонент и так предназначен работать), а не на сервере.
 
 Если результат spike'а покажет, что in-memory validate неудобен или недокументирован — это будет первый серьёзный кандидат на пересмотр архитектурного решения из плана (раздел "Валидация... на гипотетическом слитом состоянии"), и это стоит явно обсудить, а не тихо обходить костылём (запись во временную директорию на диске — рабочий, но менее чистый fallback).
+
+---
+
+## Milestone 1 — LikeC4 Parser/Validator + LocalRepositoryAdapter + Architecture Graph
+
+### Результаты technical spike (реальный `likec4@1.59.3`)
+
+Установил пакет в изолированную scratch-директорию и прогнал реальные вызовы на тестовых `.c4`-фикстурах (валидной и намеренно битой), прежде чем писать код адаптера. Ключевые находки:
+
+1. **Публичный API — `LikeC4.fromWorkspace(path)`, не in-memory multi-file парсинг.** `LikeC4.fromSource(string)` существует, но принимает только один-единственный source-string (для сниппетов), не набор файлов. Никакого документированного способа скормить несколько виртуальных файлов в память без обращения к файловой системе не нашлось.
+2. **`parsedModel()` / `computedModel()` дают богатый программный доступ**: `elements()`, `relationships()`, `views()` — именно то, что нужно для `ArchitectureGraph`. Работают даже на **частично невалидном** проекте — возвращают best-effort модель рядом с диагностиками, не бросают исключение. Это удобно: `parseProject` может всегда возвращать `{graph, diagnostics}` вместе.
+3. **`getErrors()`/`hasErrors()`** дают message + точный range (line/character) + `sourceFsPath` — прямое сырьё для `LikeC4Diagnostic`. Но это **только ошибки**, отдельного списка warnings на уровне публичного фасада `LikeC4` нет.
+4. **Точные file+line для элементов/связей/views** (`ArchitectureElement.sourceRef` и т.д.) получаются через `LikeC4ModelLocator.locateElement/locateRelation/locateView` — задокументированный, экспортируемый класс, но реально достижим только через `instance.langium.likec4.likec4.ModelLocator`, а поле `langium` в `.d.ts` помечено `protected`. TypeScript `protected` — это compile-time, не runtime, ограничение, так что путь рабочий, но это доступ к внутреннему полю в обход узкого публичного фасада `LikeC4`.
+5. **Рендер SVG не требует Playwright.** `instance.viewsService.viewsAsGraphvizOut()` отдаёт готовый SVG напрямую через WASM graphviz (`@hpcc-js/wasm-graphviz`, уже зависимость `likec4`). Playwright в зависимостях CLI-пакета, судя по всему, нужен для чего-то другого (например, PNG-экспорта высокой точности или тестирования), а не для базового SVG — то, что предполагалось риском в Milestone 0, на практике не является блокером.
+
+### Отходы от плана и почему
+
+1. **`ArchitectureViewKind` в `core-domain` изменён** с `'system-landscape' | 'system-context' | 'container' | 'component' | 'dynamic' | 'deployment'` (C4/Structurizr-номенклатура, как её изначально описал Plan-агент) на `'element' | 'dynamic' | 'deployment'` — это реальная таксономия LikeC4 (`isElementView()` / `isDynamicView()` / `isDeploymentView()`). У LikeC4 нет встроенного деления element view на system-context/container/component — это дело соглашений конкретного проекта (Architecture Rules), а не типа view сам по себе. **Почему это важно поймать сейчас**: если бы это не проверили спайком, ошибочная модель разошлась бы по `ChangeEngine`/`Proposal`/UI кода в последующих milestones, и переделка обошлась бы намного дороже.
+2. **Контракт `LikeC4Validator.validateTechnical` уточнён**: вместо буквально "in-memory, без записи на диск" — теперь "пишем гипотетическое слитое состояние во временную OS-директорию, парсим через `fromWorkspace`, удаляем директорию". Реальный проект пользователя при этом не трогается до Apply — то есть смысл требования (не портить утверждённую модель раньше времени) сохраняется, буквальная реализация — нет. Задокументировано прямо в JSDoc порта и в `temp-workspace.ts`.
+3. **`likec4` запинен на точную версию `1.59.3`** (без `^`) в `packages/likec4-adapter/package.json` — намеренно, потому что `model-locator.ts` обращается к полю, помеченному `protected`, в обход узкого публичного контракта. Апгрейд версии должен быть осознанным действием (обновить версию → прогнать тесты пакета → только потом коммитить), а не тихим следствием `npm install`.
+4. **Диагностики только уровня `error`.** `getErrors()` не даёт warnings на уровне публичного фасада — реализовывать доступ к warnings потребовало бы копать глубже во внутренние Langium-сервисы (тот же риск, что и с `ModelLocator`, но без документированного класса-обёртки поверх). Отложено; ФТ17 по факту требует только чтобы невалидный код не проходил в Apply — это уже обеспечено error-диагностиками.
+
+### Что реализовано
+
+- **`packages/likec4-adapter`**: `LikeC4NpmParser` (`LikeC4Parser`) и `LikeC4NpmValidator` (`LikeC4Validator`) поверх реального `likec4` npm-пакета; `build-architecture-graph.ts` строит `ArchitectureGraph` (elements/relationships/views + все индексы) из `parsedModel()`+`computedModel()`+`ModelLocator`; `model-locator.ts` изолирует единственное место, зависящее от internals; `temp-workspace.ts` — материализация файлов во временную директорию. 4 теста на реальном парсере (валидная модель, битый синтаксис, `validateTechnical` true/false, реальный SVG).
+- **`packages/repo-local-adapter`**: `LocalRepositoryAdapter` — обход директории (`.c4`/`.likec4`, пропуская `node_modules`/`.git`), `readFile`/`readAll`, **двухфазная атомарная `writeFiles`** (сначала все файлы пишутся во временные пути рядом, и только когда все записи успешны — все `rename` разом; при сбое любого шага временные файлы подчищаются, ни один реальный файл не тронут наполовину — прямая реализация риска №6 из плана), `getRevisionInfo` через `git rev-parse` с graceful fallback для не-git папок. 6 тестов, включая happy path с реальным `git init`.
+
+### Следующий шаг — Milestone 2
+
+Project setup UI + Settings + SnapshotStore: экраны Create Project / Project Dashboard / Settings (Local repo), плюс `SnapshotStore` (create/restore) — переиспользующий тот же паттерн атомарной записи, что уже обкатан в `LocalRepositoryAdapter.writeFiles`. После этого впервые можно будет через UI указать локальную папку и увидеть в браузере реально распарсенную модель и её диагностики — что даст возможность тестировать Diff/Preview/Apply на синтетических Proposal ещё до готовности LLM-цепочки, как и задумано порядком roadmap.

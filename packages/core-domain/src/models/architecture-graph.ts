@@ -39,13 +39,15 @@ export interface ArchitectureRelationship {
   sourceRef: SourceLocation;
 }
 
-export type ArchitectureViewKind =
-  | 'system-landscape'
-  | 'system-context'
-  | 'container'
-  | 'component'
-  | 'dynamic'
-  | 'deployment';
+/**
+ * Отражает реальную таксономию видов LikeC4 (подтверждено spike'ом в
+ * Milestone 1 через likec4.isElementView()/isDynamicView()/isDeploymentView()),
+ * а не C4/Structurizr-номенклатуру (system-context/container/component),
+ * которую предполагал изначальный план — у LikeC4 нет встроенного деления
+ * element view на такие уровни, это дело соглашений конкретного проекта
+ * (Architecture Rules), а не типа view.
+ */
+export type ArchitectureViewKind = 'element' | 'dynamic' | 'deployment';
 
 export interface ArchitectureView {
   id: ViewId;
