@@ -32,10 +32,28 @@ test('creates and retrieves a project', async () => {
       name: 'Payments Platform',
       description: 'Core payments architecture',
       localRepositoryPath: '/Users/dev/payments-likec4',
+      confluenceBaseUrl: undefined,
       createdAt: '2026-09-03T00:00:00.000Z',
       lastAnalysisAt: undefined,
       lastModifiedAt: undefined,
     });
+  });
+});
+
+test('stores and updates the Confluence base URL', async () => {
+  await withStore(async (store) => {
+    await store.create({
+      id: 'p1',
+      name: 'A',
+      localRepositoryPath: '/a',
+      confluenceBaseUrl: 'https://confluence.example.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    assert.equal((await store.get('p1'))?.confluenceBaseUrl, 'https://confluence.example.com');
+
+    await store.update('p1', { confluenceBaseUrl: 'https://confluence2.example.com' });
+    assert.equal((await store.get('p1'))?.confluenceBaseUrl, 'https://confluence2.example.com');
   });
 });
 

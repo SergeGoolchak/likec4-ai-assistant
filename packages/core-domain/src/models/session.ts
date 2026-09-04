@@ -38,6 +38,15 @@ export interface PipelineState {
     specification: ParsedSpecification;
     existingFiles: RepositoryFile[];
     architectureGraph: ArchitectureGraph;
+    /**
+     * Диагностика уже существующей модели, как она была на момент загрузки
+     * (Milestone 5, стадия build-architecture-graph) — отдельно от
+     * `validationResult`, который про валидацию СГЕНЕРИРОВАННОГО кода
+     * (стадия 14). План не заводил под это отдельного поля; смешивать оба
+     * смысла в одном поле означало бы, что стадия 14 тихо затирает
+     * диагностику исходной модели при её собственной записи.
+     */
+    existingModelDiagnostics: TechnicalValidationResult;
     extractedRequirements: ExtractedRequirement[];
     entityMatches: EntityMatchResult[];
     changeCandidates: ArchitectureChangeCandidate[];

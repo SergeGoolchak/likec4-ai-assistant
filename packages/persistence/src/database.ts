@@ -18,6 +18,7 @@ export async function openDatabase(dbFilePath: string): Promise<DatabaseSync> {
       name TEXT NOT NULL,
       description TEXT,
       local_repository_path TEXT NOT NULL,
+      confluence_base_url TEXT,
       created_at TEXT NOT NULL,
       last_analysis_at TEXT,
       last_modified_at TEXT
@@ -58,6 +59,15 @@ export async function openDatabase(dbFilePath: string): Promise<DatabaseSync> {
       PRIMARY KEY (scope_key, id)
     );
     CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_scope ON knowledge_chunks(scope_key);
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      data TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
   `);
   return db;
 }
