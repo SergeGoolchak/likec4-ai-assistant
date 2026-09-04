@@ -33,6 +33,7 @@ npm start
 - `packages/knowledge-project` — Project Knowledge Base: индексация текущей `ArchitectureGraph` + Architecture Rules проекта.
 - `packages/confluence-adapter` — `ConfluenceServerAdapter` (Server/DC, PAT) + разбор storage-format в `ConfluenceSection[]`. Пока не проверен на реальном сервере (см. explain.md).
 - `packages/repo-bitbucket-adapter` — `BitbucketServerAdapter` (Server/DC, PAT, read-only): листинг/чтение файлов в заданной `likec4Directory`, определение branch/commit.
+- `packages/core-pipeline` — `PipelineOrchestrator` и стадии 1-5 AI pipeline (Load Confluence → Parse Specification → Load LikeC4 → Build Architecture Graph), с персистентностью после каждой стадии и естественной возобновляемостью после падения процесса.
 
 ## Проверка
 
