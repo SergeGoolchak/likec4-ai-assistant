@@ -31,6 +31,8 @@ npm start
 - `packages/llm-openai` — `OpenAIEmbeddingProvider` (эмбеддинги для retrieval; chat completion `LLMProvider` появится в Milestone 6).
 - `packages/knowledge-global` — LikeC4 Knowledge Base: стартовый контент по синтаксису в `content/`, индексируется через `EmbeddingProvider`.
 - `packages/knowledge-project` — Project Knowledge Base: индексация текущей `ArchitectureGraph` + Architecture Rules проекта.
+- `packages/confluence-adapter` — `ConfluenceServerAdapter` (Server/DC, PAT) + разбор storage-format в `ConfluenceSection[]`. Пока не проверен на реальном сервере (см. explain.md).
+- `packages/repo-bitbucket-adapter` — `BitbucketServerAdapter` (Server/DC, PAT, read-only): листинг/чтение файлов в заданной `likec4Directory`, определение branch/commit.
 
 ## Проверка
 
