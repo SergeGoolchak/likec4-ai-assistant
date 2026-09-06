@@ -1,7 +1,11 @@
 {
   "name": "likec4-ai-assistant",
   "private": true,
+  "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -11,11 +15,14 @@
     "build": "npm run build -w apps/web && npm run build -w apps/server --if-present",
     "start": "npm run build && npm run start -w apps/server",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "eslint .",
     "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "concurrently": "^9.1.0",
-    "typescript": "^5.7.3"
+    "eslint": "^10.10.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.69.0"
   }
 }

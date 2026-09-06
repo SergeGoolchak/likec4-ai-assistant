@@ -1,6 +1,10 @@
 # AI Assistant for LikeC4 Architecture
 
-Локальный ассистент для дополнения существующей LikeC4-архитектуры на основе аналитических спецификаций из Confluence. См. полный план разработки: [harmonic-waddling-fog.md](./harmonic-waddling-fog.md).
+Локальный ассистент для дополнения существующей LikeC4-архитектуры на основе аналитических спецификаций из Confluence. См. полный план разработки: [docs/development-plan.md](./docs/development-plan.md).
+
+## Требования
+
+Node.js ≥24 (используется встроенный `node:sqlite`) — см. `.nvmrc`.
 
 ## Запуск
 
@@ -38,6 +42,13 @@ npm start
 ## Проверка
 
 ```bash
+npm run lint
 npm run typecheck
 npm run test
 ```
+
+Тот же набор команд гоняется в CI на каждый push в `main` и на каждый PR (`.github/workflows/ci.yml`).
+
+## Лицензия
+
+MIT, см. [LICENSE](./LICENSE).
