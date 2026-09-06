@@ -9,6 +9,9 @@ const STAGE_ORDER: { id: PipelineStageId; label: string; isDone: (s: SessionView
   { id: 'parse-specification', label: 'Разбор спецификации', isDone: (s) => s.summary.specificationChunkCount !== undefined },
   { id: 'load-likec4', label: 'Чтение существующей архитектуры', isDone: (s) => s.summary.existingFileCount !== undefined },
   { id: 'build-architecture-graph', label: 'Построение графа архитектуры', isDone: (s) => s.summary.elementCount !== undefined },
+  { id: 'extract-requirements', label: 'Извлечение требований', isDone: (s) => s.summary.extractedRequirementCount !== undefined },
+  { id: 'entity-matching', label: 'Сопоставление с существующей архитектурой', isDone: (s) => s.summary.matchedRequirementCount !== undefined },
+  { id: 'gap-analysis', label: 'Анализ пробелов в архитектуре', isDone: (s) => s.summary.changeCandidateCount !== undefined },
 ];
 
 export function AnalysisPage() {
@@ -76,6 +79,11 @@ export function AnalysisPage() {
             <Stat label="Файлов модели" value={session.summary.existingFileCount} />
             <Stat label="Элементов" value={session.summary.elementCount} />
             <Stat label="Views" value={session.summary.viewCount} />
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-4 border-t border-slate-100 pt-4">
+            <Stat label="Требований извлечено" value={session.summary.extractedRequirementCount} />
+            <Stat label="Сопоставлено с существующим" value={session.summary.matchedRequirementCount} />
+            <Stat label="Предложений изменений" value={session.summary.changeCandidateCount} />
           </div>
           {Boolean(session.summary.existingModelDiagnosticsCount) && (
             <p className="mt-3 text-xs text-amber-600">

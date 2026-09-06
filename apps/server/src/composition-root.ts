@@ -2,6 +2,8 @@ import { FileSecretsVault } from '@likec4-ai/secrets';
 import { LikeC4NpmParser, LikeC4NpmValidator } from '@likec4-ai/likec4-adapter';
 import { LocalRepositoryAdapter } from '@likec4-ai/repo-local-adapter';
 import { ConfluenceServerAdapter } from '@likec4-ai/confluence-adapter';
+import { OpenAILLMProvider, OpenAIEmbeddingProvider } from '@likec4-ai/llm-openai';
+import { LLMChangeEngine } from '@likec4-ai/change-engine';
 import {
   openDatabase,
   SqliteProjectStore,
@@ -12,9 +14,12 @@ import {
 import { PipelineOrchestrator } from '@likec4-ai/core-pipeline';
 import type {
   ArchitectureRuleStore,
+  ChangeEngine,
   ConfluenceAdapter,
+  EmbeddingProvider,
   LikeC4Parser,
   LikeC4Validator,
+  LLMProvider,
   ProjectStore,
   RepositoryAdapter,
   SecretsVault,
@@ -26,10 +31,9 @@ import { createTechnicalLogger, createUserFacingLogger, type TechnicalLogger, ty
 import { SessionEventBus } from './session-events.js';
 
 /**
- * Здесь один раз собирается всё, что нужно остальной части сервера. Адаптеры,
- * добавляемые в следующих milestones (LLMProvider, ...), подключаются в этой
- * же функции — роуты и стадии pipeline видят только AppContainer и никогда
- * не создают адаптеры напрямую.
+ * Здесь один раз собирается всё, что нужно остальной части сервера.
+ * Роуты и стадии pipeline видят только AppContainer и никогда не создают
+ * адаптеры напрямую.
  */
 export interface AppContainer {
   config: AppConfig;
@@ -47,6 +51,9 @@ export interface AppContainer {
   /** Единственное место, создающее адаптеры — маршруты никогда не делают `new ...Adapter` сами. */
   createLocalRepositoryAdapter(rootDir: string): RepositoryAdapter;
   createConfluenceAdapter(options: { baseUrl: string; token: string }): ConfluenceAdapter;
+  createLLMProvider(options: { apiKey?: string; model?: string; baseUrl?: string }): LLMProvider;
+  createEmbeddingProvider(options: { apiKey?: string; baseUrl?: string }): EmbeddingProvider;
+  createChangeEngine(llmProvider: LLMProvider): ChangeEngine;
 }
 
 export async function createAppContainer(config: AppConfig): Promise<AppContainer> {
@@ -72,5 +79,9 @@ export async function createAppContainer(config: AppConfig): Promise<AppContaine
     pipelineOrchestrator: new PipelineOrchestrator(),
     createLocalRepositoryAdapter: (rootDir: string) => new LocalRepositoryAdapter({ rootDir }),
     createConfluenceAdapter: (options) => new ConfluenceServerAdapter(options),
+    // Приоритет baseUrl: настройка конкретного проекта → server-wide env override → дефолт api.openai.com внутри провайдера.
+    createLLMProvider: (options) => new OpenAILLMProvider({ ...options, baseUrl: options.baseUrl ?? config.openaiBaseUrl }),
+    createEmbeddingProvider: (options) => new OpenAIEmbeddingProvider({ ...options, baseUrl: options.baseUrl ?? config.openaiBaseUrl }),
+    createChangeEngine: (llmProvider) => new LLMChangeEngine({ llmProvider }),
   };
 }

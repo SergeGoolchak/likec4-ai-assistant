@@ -27,6 +27,12 @@ export interface ConfluenceSettings {
   configured: boolean;
 }
 
+export interface AISettings {
+  model: string | null;
+  baseUrl: string | null;
+  configured: boolean;
+}
+
 export interface SessionSummary {
   confluenceTitle?: string;
   specificationChunkCount?: number;
@@ -35,6 +41,9 @@ export interface SessionSummary {
   relationshipCount?: number;
   viewCount?: number;
   existingModelDiagnosticsCount?: number;
+  extractedRequirementCount?: number;
+  matchedRequirementCount?: number;
+  changeCandidateCount?: number;
 }
 
 export interface SessionView {

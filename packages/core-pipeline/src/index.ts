@@ -4,3 +4,6 @@ export * from './stages/load-confluence.js';
 export * from './stages/parse-specification.js';
 export * from './stages/load-likec4.js';
 export * from './stages/build-architecture-graph.js';
+export * from './stages/extract-requirements.js';
+export * from './stages/entity-matching.js';
+export * from './stages/gap-analysis.js';

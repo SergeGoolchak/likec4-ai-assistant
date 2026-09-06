@@ -32,12 +32,14 @@ npm start
 - `packages/likec4-adapter` — `LikeC4Parser`/`LikeC4Validator` поверх официального npm-пакета `likec4`: построение `ArchitectureGraph`, техническая валидация, рендер views в SVG.
 - `packages/repo-local-adapter` — `LocalRepositoryAdapter`: чтение/атомарная запись `.c4`/`.likec4` файлов локальной папки, определение git branch/commit.
 - `packages/persistence` — `SqliteProjectStore`, `FsSnapshotStore`, `SqliteArchitectureRuleStore` и `SqliteEmbeddingIndex` поверх встроенного `node:sqlite`.
-- `packages/llm-openai` — `OpenAIEmbeddingProvider` (эмбеддинги для retrieval; chat completion `LLMProvider` появится в Milestone 6).
+- `packages/llm-openai` — `OpenAIEmbeddingProvider` (эмбеддинги для retrieval) и `OpenAILLMProvider` (chat completion, включая `completeJSON` для структурированных ответов) + `testOpenAIConnection`. Несмотря на имя, работает с любым сервером, реализующим протокол OpenAI Chat Completions — настоящим OpenAI или локальным/self-hosted (Ollama, LM Studio, vLLM, llama.cpp server и т.п.): `baseUrl` настраивается на уровне проекта, `apiKey` необязателен.
 - `packages/knowledge-global` — LikeC4 Knowledge Base: стартовый контент по синтаксису в `content/`, индексируется через `EmbeddingProvider`.
 - `packages/knowledge-project` — Project Knowledge Base: индексация текущей `ArchitectureGraph` + Architecture Rules проекта.
+- `packages/context-builder` — `ContextBuilder`: BFS-срез `ArchitectureGraph` по seed-элементам с trim по токен-бюджету + подмешивание knowledge-чанков; первый реальный потребитель появится в Milestone 8/9 (Proposal/LikeC4 Generation).
+- `packages/change-engine` — `LLMChangeEngine`: сопоставление извлечённых требований с существующими элементами архитектуры (лексический предфильтр + LLM-судья + hallucination guard), определение gap'ов и типов изменений (ФТ7 "не дублировать"), разрешение конфликтов между кандидатами.
 - `packages/confluence-adapter` — `ConfluenceServerAdapter` (Server/DC, PAT) + разбор storage-format в `ConfluenceSection[]`. Пока не проверен на реальном сервере (см. explain.md).
 - `packages/repo-bitbucket-adapter` — `BitbucketServerAdapter` (Server/DC, PAT, read-only): листинг/чтение файлов в заданной `likec4Directory`, определение branch/commit.
-- `packages/core-pipeline` — `PipelineOrchestrator` и стадии 1-5 AI pipeline (Load Confluence → Parse Specification → Load LikeC4 → Build Architecture Graph), с персистентностью после каждой стадии и естественной возобновляемостью после падения процесса.
+- `packages/core-pipeline` — `PipelineOrchestrator` и стадии 1-8 AI pipeline (Load Confluence → Parse Specification → Load LikeC4 → Build Architecture Graph → Extract Requirements → Entity Matching → Gap Analysis), с персистентностью после каждой стадии и естественной возобновляемостью после падения процесса.
 
 ## Проверка
 

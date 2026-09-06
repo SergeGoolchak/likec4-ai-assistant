@@ -19,6 +19,8 @@ export async function openDatabase(dbFilePath: string): Promise<DatabaseSync> {
       description TEXT,
       local_repository_path TEXT NOT NULL,
       confluence_base_url TEXT,
+      ai_model TEXT,
+      ai_base_url TEXT,
       created_at TEXT NOT NULL,
       last_analysis_at TEXT,
       last_modified_at TEXT

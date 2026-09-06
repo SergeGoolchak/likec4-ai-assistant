@@ -34,6 +34,12 @@ export function ProjectDashboardPage() {
             Confluence
           </Link>
           <Link
+            to={`/projects/${project.id}/ai-settings`}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            AI-провайдер
+          </Link>
+          <Link
             to={`/projects/${project.id}/architecture-rules`}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >

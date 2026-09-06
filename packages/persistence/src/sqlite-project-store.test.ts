@@ -33,6 +33,8 @@ test('creates and retrieves a project', async () => {
       description: 'Core payments architecture',
       localRepositoryPath: '/Users/dev/payments-likec4',
       confluenceBaseUrl: undefined,
+      aiModel: undefined,
+      aiBaseUrl: undefined,
       createdAt: '2026-09-03T00:00:00.000Z',
       lastAnalysisAt: undefined,
       lastModifiedAt: undefined,
@@ -54,6 +56,32 @@ test('stores and updates the Confluence base URL', async () => {
 
     await store.update('p1', { confluenceBaseUrl: 'https://confluence2.example.com' });
     assert.equal((await store.get('p1'))?.confluenceBaseUrl, 'https://confluence2.example.com');
+  });
+});
+
+test('stores and updates the AI model', async () => {
+  await withStore(async (store) => {
+    await store.create({ id: 'p1', name: 'A', localRepositoryPath: '/a', aiModel: 'gpt-4o-mini', createdAt: '2026-01-01T00:00:00.000Z' });
+    assert.equal((await store.get('p1'))?.aiModel, 'gpt-4o-mini');
+
+    await store.update('p1', { aiModel: 'gpt-4o' });
+    assert.equal((await store.get('p1'))?.aiModel, 'gpt-4o');
+  });
+});
+
+test('stores and updates the AI base URL (for OpenAI-compatible local/self-hosted servers)', async () => {
+  await withStore(async (store) => {
+    await store.create({
+      id: 'p1',
+      name: 'A',
+      localRepositoryPath: '/a',
+      aiBaseUrl: 'http://localhost:11434/v1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    assert.equal((await store.get('p1'))?.aiBaseUrl, 'http://localhost:11434/v1');
+
+    await store.update('p1', { aiBaseUrl: undefined });
+    assert.equal((await store.get('p1'))?.aiBaseUrl, undefined);
   });
 });
 

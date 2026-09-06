@@ -4,12 +4,22 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
+  ArchitectureChangeCandidate,
   ArchitectureGraph,
+  ChangeEngine,
   ConfluenceAdapter,
   ConfluencePageContent,
   ConfluencePageRef,
+  ConflictResolution,
+  EntityMatchInput,
+  EntityMatchResult,
+  GapAnalysisInput,
   LikeC4Parser,
   LikeC4ParseResult,
+  LLMCallOptions,
+  LLMMessage,
+  LLMProvider,
+  LLMResult,
   RepositoryAdapter,
   RepositoryFile,
   SessionRecord,
@@ -96,6 +106,43 @@ class FakeLikeC4Parser implements LikeC4Parser {
   }
 }
 
+class FakeLLMProvider implements LLMProvider {
+  readonly id = 'fake';
+  readonly model = 'fake';
+  readonly isLocal = true;
+  async complete(): Promise<LLMResult<string>> {
+    throw new Error('not used by these tests');
+  }
+  async completeJSON<T>(_messages: LLMMessage[], _options: LLMCallOptions): Promise<LLMResult<T>> {
+    // Consumed only by extract-requirements — classifies the single fixture chunk ("s1") as one requirement.
+    const content = { requirements: [{ chunkId: 's1', summary: 'Payments handling', category: 'modified-service' }] };
+    return { content: content as T, usage: { promptTokens: 0, completionTokens: 0 } };
+  }
+  estimateTokens(text: string): number {
+    return Math.ceil(text.length / 4);
+  }
+}
+
+class FakeChangeEngine implements ChangeEngine {
+  async matchEntities(input: EntityMatchInput): Promise<EntityMatchResult[]> {
+    return input.requirements.map((r) => ({ requirementId: r.id, matchedElementId: 'orderService', confidence: 0.9, rationale: 'fake match' }));
+  }
+  async detectGaps(input: GapAnalysisInput): Promise<ArchitectureChangeCandidate[]> {
+    return input.requirements.map((r) => ({
+      id: `candidate-${r.id}`,
+      type: 'modified-element',
+      requirementIds: [r.id],
+      matchedElementId: 'orderService',
+      description: 'fake candidate',
+      sources: [],
+      needsClarification: false,
+    }));
+  }
+  async resolveConflicts(candidates: ArchitectureChangeCandidate[]): Promise<ConflictResolution[]> {
+    return candidates.map((c) => ({ candidateId: c.id, resolved: true }));
+  }
+}
+
 function fixtureSession(): SessionRecord {
   return {
     id: 's1',
@@ -125,11 +172,13 @@ async function withStore(fn: (store: SqliteSessionHistoryStore) => Promise<void>
   }
 }
 
-test('runs stages 1-5 end to end, persisting after each and marking the session completed', async () => {
+test('runs stages 1-8 end to end, persisting after each and marking the session completed', async () => {
   await withStore(async (sessionStore) => {
     const confluenceAdapter = new FakeConfluenceAdapter();
     const repositoryAdapter = new FakeRepositoryAdapter();
     const likec4Parser = new FakeLikeC4Parser();
+    const llmProvider = new FakeLLMProvider();
+    const changeEngine = new FakeChangeEngine();
     const statuses: UserFacingStatus[] = [];
 
     const session = fixtureSession();
@@ -138,21 +187,29 @@ test('runs stages 1-5 end to end, persisting after each and marking the session 
     const orchestrator = new PipelineOrchestrator();
     const result = await orchestrator.run({
       session,
-      ports: { confluenceAdapter, repositoryAdapter, likec4Parser },
+      ports: { confluenceAdapter, repositoryAdapter, likec4Parser, llmProvider, changeEngine },
       sessionStore,
       onStatus: (s) => statuses.push(s),
     });
 
     assert.equal(result.pipelineState.status, 'completed');
-    assert.deepEqual(
-      statuses.map((s) => s.stage),
-      ['load-confluence', 'parse-specification', 'load-likec4', 'build-architecture-graph'],
-    );
+    assert.deepEqual(statuses.map((s) => s.stage), [
+      'load-confluence',
+      'parse-specification',
+      'load-likec4',
+      'build-architecture-graph',
+      'extract-requirements',
+      'entity-matching',
+      'gap-analysis',
+    ]);
     assert.equal(result.pipelineState.stageOutputs.confluenceContent?.title, 'Payment API Spec');
     assert.equal(result.pipelineState.stageOutputs.specification?.chunks.length, 1);
     assert.equal(result.pipelineState.stageOutputs.existingFiles?.length, 1);
     assert.ok(result.pipelineState.stageOutputs.architectureGraph?.elements.get('orderService'));
-    assert.equal(result.userFacingTimeline.length, 4);
+    assert.equal(result.pipelineState.stageOutputs.extractedRequirements?.length, 1);
+    assert.equal(result.pipelineState.stageOutputs.entityMatches?.[0]?.matchedElementId, 'orderService');
+    assert.equal(result.pipelineState.stageOutputs.changeCandidates?.length, 1);
+    assert.equal(result.userFacingTimeline.length, 7);
     assert.equal(result.confluencePageVersion, 1, 'confluencePageVersion should sync from the fetched page once load-confluence completes');
 
     // Persisted, not just returned in memory.
@@ -166,6 +223,7 @@ test('resuming after a simulated process restart continues from the last complet
     const confluenceAdapter = new FakeConfluenceAdapter();
     const repositoryAdapter = new FakeRepositoryAdapter();
     const likec4Parser = new FakeLikeC4Parser();
+    const ports = { confluenceAdapter, repositoryAdapter, likec4Parser, llmProvider: new FakeLLMProvider(), changeEngine: new FakeChangeEngine() };
 
     const session = fixtureSession();
     await sessionStore.create(session);
@@ -177,11 +235,7 @@ test('resuming after a simulated process restart continues from the last complet
     const partialOrchestrator = new PipelineOrchestrator();
     // Run only through completion once to get a fully persisted trail, then rewind persisted state manually
     // to "as if" only 2 stages had completed, to exercise resume from a real DB read.
-    await partialOrchestrator.run({
-      session,
-      ports: { confluenceAdapter, repositoryAdapter, likec4Parser },
-      sessionStore,
-    });
+    await partialOrchestrator.run({ session, ports, sessionStore });
     assert.equal(confluenceAdapter.calls, 1);
     assert.equal(repositoryAdapter.calls, 1);
     assert.equal(likec4Parser.calls, 1);
@@ -191,11 +245,7 @@ test('resuming after a simulated process restart continues from the last complet
     const reloaded = await sessionStore.get('s1');
     assert.ok(reloaded);
     const secondOrchestrator = new PipelineOrchestrator();
-    const result = await secondOrchestrator.run({
-      session: reloaded,
-      ports: { confluenceAdapter, repositoryAdapter, likec4Parser },
-      sessionStore,
-    });
+    const result = await secondOrchestrator.run({ session: reloaded, ports, sessionStore });
 
     assert.equal(result.pipelineState.status, 'completed');
     assert.equal(confluenceAdapter.calls, 1, 'load-confluence must not re-run once already done');
@@ -241,19 +291,14 @@ test('re-running a failed session retries only the failed stage and can succeed'
     await sessionStore.create(session);
     const orchestrator = new PipelineOrchestrator();
 
-    await assert.rejects(() =>
-      orchestrator.run({ session, ports: { confluenceAdapter, repositoryAdapter, likec4Parser }, sessionStore }),
-    );
+    const ports = { confluenceAdapter, repositoryAdapter, likec4Parser, llmProvider: new FakeLLMProvider(), changeEngine: new FakeChangeEngine() };
+    await assert.rejects(() => orchestrator.run({ session, ports, sessionStore }));
     assert.equal(confluenceAdapter.calls, 1);
 
     const failed = await sessionStore.get('s1');
     assert.ok(failed);
     const retryOrchestrator = new PipelineOrchestrator();
-    const result = await retryOrchestrator.run({
-      session: failed,
-      ports: { confluenceAdapter, repositoryAdapter, likec4Parser },
-      sessionStore,
-    });
+    const result = await retryOrchestrator.run({ session: failed, ports, sessionStore });
 
     assert.equal(result.pipelineState.status, 'completed');
     assert.equal(confluenceAdapter.calls, 1, 'load-confluence should not be re-run on retry');

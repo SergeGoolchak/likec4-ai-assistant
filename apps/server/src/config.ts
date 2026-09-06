@@ -12,6 +12,8 @@ export interface AppConfig {
   secretsKeyFilePath: string;
   dbFilePath: string;
   snapshotsRootDir: string;
+  /** Обычно не задан (тогда используется настоящий api.openai.com) — override для OpenAI-совместимого прокси/тестового стенда. */
+  openaiBaseUrl?: string;
 }
 
 export function loadConfig(): AppConfig {
@@ -24,5 +26,6 @@ export function loadConfig(): AppConfig {
     secretsKeyFilePath: join(keyDir, 'vault.key'),
     dbFilePath: join(dataDir, 'app.db'),
     snapshotsRootDir: join(dataDir, 'snapshots'),
+    openaiBaseUrl: process.env.LIKEC4_AI_OPENAI_BASE_URL,
   };
 }

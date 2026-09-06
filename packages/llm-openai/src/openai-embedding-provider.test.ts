@@ -56,6 +56,21 @@ test('throws a descriptive error without leaking the API key on a failed request
   );
 });
 
+test('sends no Authorization header when no API key is configured (e.g. a local embedding server)', async () => {
+  let sawHeaders: Record<string, string> | undefined;
+  const provider = new OpenAIEmbeddingProvider({
+    baseUrl: 'http://localhost:11434/v1',
+    fetchImpl: fakeFetch((_url, init) => {
+      sawHeaders = init.headers as Record<string, string>;
+      return new Response(JSON.stringify({ data: [{ index: 0, embedding: [1] }] }), { status: 200 });
+    }),
+  });
+
+  await provider.embed(['x']);
+
+  assert.equal(sawHeaders?.Authorization, undefined);
+});
+
 test('returns an empty array without making a request for empty input', async () => {
   let called = false;
   const provider = new OpenAIEmbeddingProvider({

@@ -1,5 +1,5 @@
 import type { UserFacingError } from '@likec4-ai/core-domain';
-import type { ArchitectureRule, ConfluenceSettings, ProjectDetailResponse, ProjectRecord, SessionView } from './types';
+import type { AISettings, ArchitectureRule, ConfluenceSettings, ProjectDetailResponse, ProjectRecord, SessionView } from './types';
 
 /**
  * Любая ошибка API долетает до компонентов либо как реальный UserFacingError
@@ -89,6 +89,14 @@ export function getConfluenceSettings(projectId: string): Promise<ConfluenceSett
 
 export function saveConfluenceSettings(projectId: string, input: { baseUrl: string; token: string }): Promise<ConfluenceSettings> {
   return request(`/api/projects/${projectId}/confluence-settings`, { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function getAISettings(projectId: string): Promise<AISettings> {
+  return request(`/api/projects/${projectId}/ai-settings`);
+}
+
+export function saveAISettings(projectId: string, input: { model?: string; apiKey?: string; baseUrl?: string }): Promise<AISettings> {
+  return request(`/api/projects/${projectId}/ai-settings`, { method: 'POST', body: JSON.stringify(input) });
 }
 
 export function createSession(projectId: string, input: { confluencePageId: string }): Promise<{ sessionId: string }> {

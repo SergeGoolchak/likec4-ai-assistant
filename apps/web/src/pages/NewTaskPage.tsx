@@ -82,7 +82,7 @@ export function NewTaskPage() {
             disabled={mutation.isPending || !confluence?.configured}
             className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            {mutation.isPending ? 'Запускаем…' : 'Analyze Specification'}
+            {mutation.isPending ? 'Запускаем…' : 'Проанализировать спецификацию'}
           </button>
         </form>
       </Card>

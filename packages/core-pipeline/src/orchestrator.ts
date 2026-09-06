@@ -3,10 +3,21 @@ import { loadConfluenceStage } from './stages/load-confluence.js';
 import { parseSpecificationStage } from './stages/parse-specification.js';
 import { loadLikeC4Stage } from './stages/load-likec4.js';
 import { buildArchitectureGraphStage } from './stages/build-architecture-graph.js';
+import { extractRequirementsStage } from './stages/extract-requirements.js';
+import { entityMatchingStage } from './stages/entity-matching.js';
+import { gapAnalysisStage } from './stages/gap-analysis.js';
 import type { OrchestratorPorts, PipelineStageDef } from './stage.js';
 
-/** Стадии 1-5 плана. Стадии 6+ (LLM-зависимые) присоединятся в Milestone 6. */
-export const STAGES: PipelineStageDef[] = [loadConfluenceStage, parseSpecificationStage, loadLikeC4Stage, buildArchitectureGraphStage];
+/** Стадии 1-8 плана. Стадия 9 (Ambiguity Detection, Milestone 7) присоединится следующей. */
+export const STAGES: PipelineStageDef[] = [
+  loadConfluenceStage,
+  parseSpecificationStage,
+  loadLikeC4Stage,
+  buildArchitectureGraphStage,
+  extractRequirementsStage,
+  entityMatchingStage,
+  gapAnalysisStage,
+];
 
 export interface RunOptions {
   session: SessionRecord;

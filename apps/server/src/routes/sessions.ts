@@ -23,6 +23,9 @@ interface SessionSummary {
   relationshipCount?: number;
   viewCount?: number;
   existingModelDiagnosticsCount?: number;
+  extractedRequirementCount?: number;
+  matchedRequirementCount?: number;
+  changeCandidateCount?: number;
 }
 
 interface SessionView {
@@ -46,8 +49,13 @@ export async function registerSessionRoutes(app: FastifyInstance, container: App
       if (!confluencePageId) return sendError(reply, 400, missingFieldError('confluencePageId', 'ID страницы Confluence'));
 
       if (!project.confluenceBaseUrl) return sendError(reply, 400, confluenceNotConfiguredError());
-      const token = await container.secretsVault.get(`confluence.pat.${project.id}`);
-      if (!token) return sendError(reply, 400, confluenceNotConfiguredError());
+      const confluenceToken = await container.secretsVault.get(`confluence.pat.${project.id}`);
+      if (!confluenceToken) return sendError(reply, 400, confluenceNotConfiguredError());
+
+      // "Настроено" = хотя бы раз прошёл тест подключения (см. ai-settings.ts) — не наличие ключа:
+      // локальным OpenAI-совместимым серверам ключ часто не нужен вовсе.
+      if (project.aiModel === undefined) return sendError(reply, 400, aiNotConfiguredError());
+      const openaiApiKey = await container.secretsVault.get(`openai.api-key.${project.id}`);
 
       const repositoryAdapter = container.createLocalRepositoryAdapter(project.localRepositoryPath);
       const repoConnection = await repositoryAdapter.testConnection();
@@ -55,7 +63,9 @@ export async function registerSessionRoutes(app: FastifyInstance, container: App
         return sendError(reply, 400, repoConnection.error ?? confluenceNotConfiguredError());
       }
 
-      const confluenceAdapter = container.createConfluenceAdapter({ baseUrl: project.confluenceBaseUrl, token });
+      const confluenceAdapter = container.createConfluenceAdapter({ baseUrl: project.confluenceBaseUrl, token: confluenceToken });
+      const llmProvider = container.createLLMProvider({ apiKey: openaiApiKey, model: project.aiModel, baseUrl: project.aiBaseUrl });
+      const changeEngine = container.createChangeEngine(llmProvider);
       const revisionInfo = await repositoryAdapter.getRevisionInfo();
 
       const session: SessionRecord = {
@@ -66,9 +76,8 @@ export async function registerSessionRoutes(app: FastifyInstance, container: App
         confluenceRef: { baseUrl: project.confluenceBaseUrl, pageId: confluencePageId },
         confluencePageVersion: 0,
         repositorySnapshotRef: revisionInfo.commit ?? revisionInfo.branch ?? 'local',
-        // AI provider настройки появятся в Milestone 6 — стадии 1-5 не вызывают LLM вовсе.
-        llmProviderId: 'none',
-        llmModel: 'n/a',
+        llmProviderId: llmProvider.id,
+        llmModel: llmProvider.model,
         pipelineState: { currentStage: 'load-confluence', status: 'running', stageOutputs: {}, pendingQuestionIds: [] },
         questions: [],
         validationHistory: [],
@@ -77,7 +86,14 @@ export async function registerSessionRoutes(app: FastifyInstance, container: App
       };
 
       await container.sessionHistoryStore.create(session);
-      runInBackground(container, session, { confluenceAdapter, repositoryAdapter, likec4Parser: container.likec4Parser });
+      runInBackground(container, session, {
+        confluenceAdapter,
+        repositoryAdapter,
+        likec4Parser: container.likec4Parser,
+        llmProvider,
+        changeEngine,
+        architectureRuleStore: container.architectureRuleStore,
+      });
 
       reply.code(202);
       return { sessionId: session.id };
@@ -161,6 +177,9 @@ function toSessionView(session: SessionRecord): SessionView {
       relationshipCount: outputs.architectureGraph?.relationships.size,
       viewCount: outputs.architectureGraph?.views.size,
       existingModelDiagnosticsCount: outputs.existingModelDiagnostics?.diagnostics.length,
+      extractedRequirementCount: outputs.extractedRequirements?.length,
+      matchedRequirementCount: outputs.entityMatches?.filter((m) => m.matchedElementId).length,
+      changeCandidateCount: outputs.changeCandidates?.length,
     },
   };
 }
@@ -206,6 +225,16 @@ function confluenceNotConfiguredError(): UserFacingError {
     title: 'Confluence не подключён',
     likelyCause: 'В настройках проекта не указан адрес Confluence или не сохранён токен доступа.',
     suggestedAction: 'Откройте настройки проекта и подключите Confluence перед запуском анализа.',
+    retryable: false,
+  };
+}
+
+function aiNotConfiguredError(): UserFacingError {
+  return {
+    id: 'sessions.ai-not-configured',
+    title: 'AI-провайдер не подключён',
+    likelyCause: 'В настройках проекта не сохранён OpenAI API key.',
+    suggestedAction: 'Откройте настройки проекта и подключите AI-провайдера перед запуском анализа.',
     retryable: false,
   };
 }
