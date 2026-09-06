@@ -6,6 +6,7 @@ interface ProjectRow {
   name: string;
   description: string | null;
   local_repository_path: string;
+  confluence_base_url: string | null;
   created_at: string;
   last_analysis_at: string | null;
   last_modified_at: string | null;
@@ -22,14 +23,15 @@ export class SqliteProjectStore implements ProjectStore {
   async create(project: ProjectRecord): Promise<void> {
     this.#db
       .prepare(
-        `INSERT INTO projects (id, name, description, local_repository_path, created_at, last_analysis_at, last_modified_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO projects (id, name, description, local_repository_path, confluence_base_url, created_at, last_analysis_at, last_modified_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         project.id,
         project.name,
         project.description ?? null,
         project.localRepositoryPath,
+        project.confluenceBaseUrl ?? null,
         project.createdAt,
         project.lastAnalysisAt ?? null,
         project.lastModifiedAt ?? null,
@@ -53,13 +55,14 @@ export class SqliteProjectStore implements ProjectStore {
     this.#db
       .prepare(
         `UPDATE projects
-         SET name = ?, description = ?, local_repository_path = ?, created_at = ?, last_analysis_at = ?, last_modified_at = ?
+         SET name = ?, description = ?, local_repository_path = ?, confluence_base_url = ?, created_at = ?, last_analysis_at = ?, last_modified_at = ?
          WHERE id = ?`,
       )
       .run(
         merged.name,
         merged.description ?? null,
         merged.localRepositoryPath,
+        merged.confluenceBaseUrl ?? null,
         merged.createdAt,
         merged.lastAnalysisAt ?? null,
         merged.lastModifiedAt ?? null,
@@ -78,6 +81,7 @@ function fromRow(row: ProjectRow): ProjectRecord {
     name: row.name,
     description: row.description ?? undefined,
     localRepositoryPath: row.local_repository_path,
+    confluenceBaseUrl: row.confluence_base_url ?? undefined,
     createdAt: row.created_at,
     lastAnalysisAt: row.last_analysis_at ?? undefined,
     lastModifiedAt: row.last_modified_at ?? undefined,

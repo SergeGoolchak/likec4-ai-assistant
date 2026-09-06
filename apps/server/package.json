@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "@fastify/static": "^10.1.3",
+    "@likec4-ai/confluence-adapter": "*",
     "@likec4-ai/core-domain": "*",
+    "@likec4-ai/core-pipeline": "*",
     "@likec4-ai/likec4-adapter": "*",
     "@likec4-ai/persistence": "*",
     "@likec4-ai/repo-local-adapter": "*",

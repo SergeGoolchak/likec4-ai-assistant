@@ -26,12 +26,26 @@ export function ProjectDashboardPage() {
           {project.description && <p className="mt-1 text-slate-500">{project.description}</p>}
           <p className="mt-2 text-xs text-slate-400">{project.localRepositoryPath}</p>
         </div>
-        <Link
-          to={`/projects/${project.id}/architecture-rules`}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Architecture Rules
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <Link
+            to={`/projects/${project.id}/confluence-settings`}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Confluence
+          </Link>
+          <Link
+            to={`/projects/${project.id}/architecture-rules`}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Architecture Rules
+          </Link>
+          <Link
+            to={`/projects/${project.id}/tasks/new`}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            + Новая задача
+          </Link>
+        </div>
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">

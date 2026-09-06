@@ -1,24 +1,35 @@
 import { FileSecretsVault } from '@likec4-ai/secrets';
 import { LikeC4NpmParser, LikeC4NpmValidator } from '@likec4-ai/likec4-adapter';
 import { LocalRepositoryAdapter } from '@likec4-ai/repo-local-adapter';
-import { openDatabase, SqliteProjectStore, FsSnapshotStore, SqliteArchitectureRuleStore } from '@likec4-ai/persistence';
+import { ConfluenceServerAdapter } from '@likec4-ai/confluence-adapter';
+import {
+  openDatabase,
+  SqliteProjectStore,
+  FsSnapshotStore,
+  SqliteArchitectureRuleStore,
+  SqliteSessionHistoryStore,
+} from '@likec4-ai/persistence';
+import { PipelineOrchestrator } from '@likec4-ai/core-pipeline';
 import type {
   ArchitectureRuleStore,
+  ConfluenceAdapter,
   LikeC4Parser,
   LikeC4Validator,
   ProjectStore,
   RepositoryAdapter,
   SecretsVault,
+  SessionHistoryStore,
   SnapshotStore,
 } from '@likec4-ai/core-domain';
 import type { AppConfig } from './config.js';
 import { createTechnicalLogger, createUserFacingLogger, type TechnicalLogger, type UserFacingLogger } from './logger.js';
+import { SessionEventBus } from './session-events.js';
 
 /**
  * Здесь один раз собирается всё, что нужно остальной части сервера. Адаптеры,
- * добавляемые в следующих milestones (ConfluenceAdapter, LLMProvider, ...),
- * подключаются в этой же функции — роуты и стадии pipeline видят только
- * AppContainer и никогда не создают адаптеры напрямую.
+ * добавляемые в следующих milestones (LLMProvider, ...), подключаются в этой
+ * же функции — роуты и стадии pipeline видят только AppContainer и никогда
+ * не создают адаптеры напрямую.
  */
 export interface AppContainer {
   config: AppConfig;
@@ -30,8 +41,12 @@ export interface AppContainer {
   projectStore: ProjectStore;
   snapshotStore: SnapshotStore;
   architectureRuleStore: ArchitectureRuleStore;
-  /** Единственное место, создающее RepositoryAdapter — маршруты никогда не делают `new LocalRepositoryAdapter` сами. */
+  sessionHistoryStore: SessionHistoryStore;
+  sessionEvents: SessionEventBus;
+  pipelineOrchestrator: PipelineOrchestrator;
+  /** Единственное место, создающее адаптеры — маршруты никогда не делают `new ...Adapter` сами. */
   createLocalRepositoryAdapter(rootDir: string): RepositoryAdapter;
+  createConfluenceAdapter(options: { baseUrl: string; token: string }): ConfluenceAdapter;
 }
 
 export async function createAppContainer(config: AppConfig): Promise<AppContainer> {
@@ -52,6 +67,10 @@ export async function createAppContainer(config: AppConfig): Promise<AppContaine
     projectStore: new SqliteProjectStore(db),
     snapshotStore: new FsSnapshotStore({ db, snapshotsRootDir: config.snapshotsRootDir }),
     architectureRuleStore: new SqliteArchitectureRuleStore(db),
+    sessionHistoryStore: new SqliteSessionHistoryStore(db),
+    sessionEvents: new SessionEventBus(),
+    pipelineOrchestrator: new PipelineOrchestrator(),
     createLocalRepositoryAdapter: (rootDir: string) => new LocalRepositoryAdapter({ rootDir }),
+    createConfluenceAdapter: (options) => new ConfluenceServerAdapter(options),
   };
 }
