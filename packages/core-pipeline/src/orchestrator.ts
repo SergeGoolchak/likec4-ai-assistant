@@ -6,9 +6,12 @@ import { buildArchitectureGraphStage } from './stages/build-architecture-graph.j
 import { extractRequirementsStage } from './stages/extract-requirements.js';
 import { entityMatchingStage } from './stages/entity-matching.js';
 import { gapAnalysisStage } from './stages/gap-analysis.js';
+import { ambiguityDetectionStage } from './stages/ambiguity-detection.js';
+import { userClarificationStage } from './stages/user-clarification.js';
+import { computePendingQuestionIds } from './pending-questions.js';
 import type { OrchestratorPorts, PipelineStageDef } from './stage.js';
 
-/** Стадии 1-8 плана. Стадия 9 (Ambiguity Detection, Milestone 7) присоединится следующей. */
+/** Стадии 1-10 плана. Стадия 11 (Proposal Generation, Milestone 8) присоединится следующей. */
 export const STAGES: PipelineStageDef[] = [
   loadConfluenceStage,
   parseSpecificationStage,
@@ -17,6 +20,8 @@ export const STAGES: PipelineStageDef[] = [
   extractRequirementsStage,
   entityMatchingStage,
   gapAnalysisStage,
+  ambiguityDetectionStage,
+  userClarificationStage,
 ];
 
 export interface RunOptions {
@@ -42,6 +47,16 @@ export class PipelineOrchestrator {
     for (const stage of STAGES) {
       if (stage.isDone(session.pipelineState.stageOutputs)) continue;
 
+      if (stage.isGate) {
+        // Гейт ещё не готов пропустить дальше (isDone === false) — не ошибка,
+        // просто ждём внешнего события (ответ на вопрос и т.п.). Останавливаемся
+        // здесь же, не вызывая run(): следующий вызов run() (после того как
+        // событие произойдёт) снова дойдёт до этой стадии и увидит isDone === true.
+        session = pause(session, stage);
+        await options.sessionStore.update(session.id, session);
+        return session;
+      }
+
       const startedAt = Date.now();
       options.onStatus?.({ stage: stage.id, label: stage.label, at: new Date().toISOString() });
 
@@ -54,6 +69,16 @@ export class PipelineOrchestrator {
         await options.sessionStore.update(session.id, session);
         throw err;
       }
+    }
+
+    // Дошли до конца STAGES, ни разу не остановившись на гейте — либо последняя
+    // стадия выполнилась только что (advance() уже поставил 'completed' через
+    // isLastStage), либо она была уже done ДО цикла (например гейт, у которого
+    // isDone стал true между вызовами run()) — тогда advance() для неё не звался
+    // вовсе, и статус нужно закрыть здесь.
+    if (session.pipelineState.status !== 'completed') {
+      session = { ...session, pipelineState: { ...session.pipelineState, status: 'completed' } };
+      await options.sessionStore.update(session.id, session);
     }
 
     return session;
@@ -77,6 +102,22 @@ function advance(session: SessionRecord, stage: PipelineStageDef, partialOutputs
       currentStage: stage.id,
       status: isLastStage ? 'completed' : 'running',
       stageOutputs: { ...session.pipelineState.stageOutputs, ...partialOutputs },
+    },
+    userFacingTimeline: [...session.userFacingTimeline, { at, message: stage.label }],
+  };
+}
+
+function pause(session: SessionRecord, stage: PipelineStageDef): SessionRecord {
+  const at = new Date().toISOString();
+  const ambiguities = session.pipelineState.stageOutputs.ambiguities ?? [];
+  return {
+    ...session,
+    pipelineState: {
+      ...session.pipelineState,
+      currentStage: stage.id,
+      status: 'paused-for-user',
+      // Пересчитано из ambiguities, а не оставлено как было — см. computePendingQuestionIds.
+      pendingQuestionIds: computePendingQuestionIds(ambiguities),
     },
     userFacingTimeline: [...session.userFacingTimeline, { at, message: stage.label }],
   };

@@ -7,6 +7,9 @@ export type {
   PipelineStatus,
   UserFacingEvent,
   UserFacingStatus,
+  ClarificationQuestion,
+  QuestionOption,
+  QuestionStatus,
 } from '@likec4-ai/core-domain';
 
 export interface ProjectModelSummary {
@@ -44,6 +47,7 @@ export interface SessionSummary {
   extractedRequirementCount?: number;
   matchedRequirementCount?: number;
   changeCandidateCount?: number;
+  ambiguityCount?: number;
 }
 
 export interface SessionView {
@@ -54,4 +58,5 @@ export interface SessionView {
   timeline: import('@likec4-ai/core-domain').UserFacingEvent[];
   error?: import('@likec4-ai/core-domain').UserFacingError;
   summary: SessionSummary;
+  questions: import('@likec4-ai/core-domain').ClarificationQuestion[];
 }

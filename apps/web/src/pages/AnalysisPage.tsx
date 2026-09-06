@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useMutation } from '@tanstack/react-query';
 import type { PipelineStageId, SessionView } from '../api/types';
+import { ApiError, answerQuestion } from '../api/client';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
+import { QuestionCard, type QuestionAnswerInput } from '../components/QuestionCard';
 
 const STAGE_ORDER: { id: PipelineStageId; label: string; isDone: (s: SessionView) => boolean }[] = [
   { id: 'load-confluence', label: 'Чтение Confluence', isDone: (s) => s.summary.confluenceTitle !== undefined },
@@ -12,12 +15,15 @@ const STAGE_ORDER: { id: PipelineStageId; label: string; isDone: (s: SessionView
   { id: 'extract-requirements', label: 'Извлечение требований', isDone: (s) => s.summary.extractedRequirementCount !== undefined },
   { id: 'entity-matching', label: 'Сопоставление с существующей архитектурой', isDone: (s) => s.summary.matchedRequirementCount !== undefined },
   { id: 'gap-analysis', label: 'Анализ пробелов в архитектуре', isDone: (s) => s.summary.changeCandidateCount !== undefined },
+  { id: 'ambiguity-detection', label: 'Выявление неоднозначностей', isDone: (s) => s.summary.ambiguityCount !== undefined },
+  { id: 'user-clarification', label: 'Уточнения от вас', isDone: (s) => s.questions.every((q) => q.status !== 'open') },
 ];
 
 export function AnalysisPage() {
   const { id: sessionId } = useParams<{ id: string }>();
   const [session, setSession] = useState<SessionView | null>(null);
   const [connectionLost, setConnectionLost] = useState(false);
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -29,7 +35,20 @@ export function AnalysisPage() {
     source.onerror = () => setConnectionLost(true);
 
     return () => source.close();
-  }, [sessionId]);
+    // connectionAttempt — не читается внутри, но нарочно в зависимостях: после ответа на
+    // последний открытый вопрос предыдущий EventSource уже закрыт (см. sessions.ts, SSE-роут
+    // завершает соединение на paused-for-user) — это способ открыть новый и снова слушать live-статусы.
+  }, [sessionId, connectionAttempt]);
+
+  const answerMutation = useMutation({
+    mutationFn: ({ questionId, input }: { questionId: string; input: QuestionAnswerInput }) =>
+      answerQuestion(sessionId!, questionId, input),
+    onSuccess: (updated) => {
+      setSession(updated);
+      setConnectionLost(false);
+      setConnectionAttempt((n) => n + 1);
+    },
+  });
 
   if (!session) {
     return <p className="text-sm text-slate-500">Подключаемся к сессии анализа…</p>;
@@ -37,6 +56,7 @@ export function AnalysisPage() {
 
   const firstPendingIndex = STAGE_ORDER.findIndex((stage) => !stage.isDone(session));
   const currentIndex = firstPendingIndex === -1 ? STAGE_ORDER.length : firstPendingIndex;
+  const openQuestions = session.questions.filter((q) => q.status === 'open');
 
   return (
     <div className="max-w-lg">
@@ -53,17 +73,35 @@ export function AnalysisPage() {
         <ul className="space-y-3">
           {STAGE_ORDER.map((stage, index) => {
             const done = stage.isDone(session);
-            const isCurrent = index === currentIndex && session.status === 'running';
+            const isRunning = index === currentIndex && session.status === 'running';
+            const isPaused = index === currentIndex && session.status === 'paused-for-user';
             const isFailedHere = index === currentIndex && session.status === 'failed';
             return (
               <li key={stage.id} className="flex items-center gap-3 text-sm">
-                <StageIcon done={done} current={isCurrent} failed={isFailedHere} />
+                <StageIcon done={done} running={isRunning} paused={isPaused} failed={isFailedHere} />
                 <span className={done ? 'text-slate-900' : isFailedHere ? 'text-rose-700' : 'text-slate-500'}>{stage.label}</span>
               </li>
             );
           })}
         </ul>
       </Card>
+
+      {session.status === 'paused-for-user' && openQuestions.length > 0 && (
+        <div className="mt-6 space-y-4">
+          <p className="text-sm font-medium text-amber-700">
+            Нужны уточнения, прежде чем продолжить — {openQuestions.length} {questionWord(openQuestions.length)}:
+          </p>
+          {openQuestions.map((question) => (
+            <QuestionCard
+              key={question.id}
+              question={question}
+              isSubmitting={answerMutation.isPending}
+              onAnswer={(input) => answerMutation.mutate({ questionId: question.id, input })}
+            />
+          ))}
+          {answerMutation.error instanceof ApiError && <ErrorState error={answerMutation.error.error} />}
+        </div>
+      )}
 
       {session.status === 'failed' && session.error && (
         <div className="mt-6">
@@ -96,7 +134,15 @@ export function AnalysisPage() {
   );
 }
 
-function StageIcon({ done, current, failed }: { done: boolean; current: boolean; failed: boolean }) {
+function questionWord(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'вопрос';
+  if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return 'вопроса';
+  return 'вопросов';
+}
+
+function StageIcon({ done, running, paused, failed }: { done: boolean; running: boolean; paused: boolean; failed: boolean }) {
   if (done) {
     return (
       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs text-white">✓</span>
@@ -105,7 +151,12 @@ function StageIcon({ done, current, failed }: { done: boolean; current: boolean;
   if (failed) {
     return <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 text-xs text-white">✕</span>;
   }
-  if (current) {
+  if (paused) {
+    return (
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-400 text-xs text-white">?</span>
+    );
+  }
+  if (running) {
     return <span className="h-5 w-5 shrink-0 animate-pulse rounded-full border-2 border-slate-900" aria-hidden />;
   }
   return <span className="h-5 w-5 shrink-0 rounded-full border-2 border-slate-200" aria-hidden />;

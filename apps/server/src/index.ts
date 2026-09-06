@@ -11,6 +11,7 @@ import { registerArchitectureRuleRoutes } from './routes/architecture-rules.js';
 import { registerConfluenceSettingsRoutes } from './routes/confluence-settings.js';
 import { registerAISettingsRoutes } from './routes/ai-settings.js';
 import { registerSessionRoutes } from './routes/sessions.js';
+import { registerQuestionRoutes } from './routes/questions.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -26,6 +27,7 @@ async function main(): Promise<void> {
   await registerConfluenceSettingsRoutes(app, container);
   await registerAISettingsRoutes(app, container);
   await registerSessionRoutes(app, container);
+  await registerQuestionRoutes(app, container);
 
   // Продакшен (`npm start`): раздаём собранный web SPA из того же процесса
   // (ФТ28 — единый локальный процесс). В dev-режиме `npm run dev` поднимает

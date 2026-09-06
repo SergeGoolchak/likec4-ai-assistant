@@ -11,7 +11,7 @@ import type {
   SessionRecord,
 } from '@likec4-ai/core-domain';
 
-/** Порты, нужные стадиям 1-8. Стадии 9+ добавят свои по мере реализации в следующих milestones. */
+/** Порты, нужные стадиям 1-10 (Milestone 7 переиспользует `changeEngine`, новых портов не добавляет). Стадии 11+ добавят свои по мере реализации в следующих milestones. */
 export interface OrchestratorPorts {
   confluenceAdapter: ConfluenceAdapter;
   repositoryAdapter: RepositoryAdapter;
@@ -42,4 +42,13 @@ export interface PipelineStageDef {
    */
   isDone(stageOutputs: PipelineState['stageOutputs']): boolean;
   run(state: PipelineState, ctx: StageContext): Promise<Partial<PipelineState['stageOutputs']>>;
+  /**
+   * Стадии-гейты (10. User Clarification, позже — 12. User Review) ждут внешнего
+   * события (ответ пользователя), а не что-то вычисляют. Когда `isDone` ещё
+   * false, оркестратор не вызывает `run()` для такой стадии — вместо этого
+   * останавливается с `status: 'paused-for-user'` (см. orchestrator.ts). `run()`
+   * у гейта поэтому никогда фактически не исполняется, но остаётся в интерфейсе
+   * ради простоты — не заводим отдельный union-тип ради одного поля.
+   */
+  isGate?: boolean;
 }

@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import type { OrchestratorPorts } from '@likec4-ai/core-pipeline';
 import type {
+  ClarificationQuestion,
   PipelineStageId,
   PipelineStatus,
   SessionRecord,
@@ -10,6 +10,7 @@ import type {
   UserFacingEvent,
 } from '@likec4-ai/core-domain';
 import type { AppContainer } from '../composition-root.js';
+import { buildOrchestratorPorts, type FullOrchestratorPorts } from '../orchestrator-ports.js';
 
 interface CreateSessionBody {
   confluencePageId?: string;
@@ -26,9 +27,10 @@ interface SessionSummary {
   extractedRequirementCount?: number;
   matchedRequirementCount?: number;
   changeCandidateCount?: number;
+  ambiguityCount?: number;
 }
 
-interface SessionView {
+export interface SessionView {
   id: string;
   projectId: string;
   status: PipelineStatus;
@@ -36,6 +38,8 @@ interface SessionView {
   timeline: UserFacingEvent[];
   error?: UserFacingError;
   summary: SessionSummary;
+  /** Открытые и уже отвеченные вопросы стадии 9 — непустой список открытых означает, что pipeline стоит на паузе (см. PipelineStatus.paused-for-user). */
+  questions: ClarificationQuestion[];
 }
 
 export async function registerSessionRoutes(app: FastifyInstance, container: AppContainer): Promise<void> {
@@ -48,36 +52,23 @@ export async function registerSessionRoutes(app: FastifyInstance, container: App
       const confluencePageId = request.body?.confluencePageId?.trim();
       if (!confluencePageId) return sendError(reply, 400, missingFieldError('confluencePageId', 'ID страницы Confluence'));
 
-      if (!project.confluenceBaseUrl) return sendError(reply, 400, confluenceNotConfiguredError());
-      const confluenceToken = await container.secretsVault.get(`confluence.pat.${project.id}`);
-      if (!confluenceToken) return sendError(reply, 400, confluenceNotConfiguredError());
+      const built = await buildOrchestratorPorts(container, project);
+      if (!built.ok) return sendError(reply, 400, built.error);
+      const { ports } = built;
 
-      // "Настроено" = хотя бы раз прошёл тест подключения (см. ai-settings.ts) — не наличие ключа:
-      // локальным OpenAI-совместимым серверам ключ часто не нужен вовсе.
-      if (project.aiModel === undefined) return sendError(reply, 400, aiNotConfiguredError());
-      const openaiApiKey = await container.secretsVault.get(`openai.api-key.${project.id}`);
-
-      const repositoryAdapter = container.createLocalRepositoryAdapter(project.localRepositoryPath);
-      const repoConnection = await repositoryAdapter.testConnection();
-      if (!repoConnection.ok) {
-        return sendError(reply, 400, repoConnection.error ?? confluenceNotConfiguredError());
-      }
-
-      const confluenceAdapter = container.createConfluenceAdapter({ baseUrl: project.confluenceBaseUrl, token: confluenceToken });
-      const llmProvider = container.createLLMProvider({ apiKey: openaiApiKey, model: project.aiModel, baseUrl: project.aiBaseUrl });
-      const changeEngine = container.createChangeEngine(llmProvider);
-      const revisionInfo = await repositoryAdapter.getRevisionInfo();
+      const revisionInfo = await ports.repositoryAdapter.getRevisionInfo();
 
       const session: SessionRecord = {
         id: randomUUID(),
         projectId: project.id,
         createdAt: new Date().toISOString(),
         createdByUserEmail: userInfo().username,
-        confluenceRef: { baseUrl: project.confluenceBaseUrl, pageId: confluencePageId },
+        // project.confluenceBaseUrl точно задан здесь — buildOrchestratorPorts уже это проверил как часть ok:true.
+        confluenceRef: { baseUrl: project.confluenceBaseUrl!, pageId: confluencePageId },
         confluencePageVersion: 0,
         repositorySnapshotRef: revisionInfo.commit ?? revisionInfo.branch ?? 'local',
-        llmProviderId: llmProvider.id,
-        llmModel: llmProvider.model,
+        llmProviderId: ports.llmProvider.id,
+        llmModel: ports.llmProvider.model,
         pipelineState: { currentStage: 'load-confluence', status: 'running', stageOutputs: {}, pendingQuestionIds: [] },
         questions: [],
         validationHistory: [],
@@ -86,14 +77,7 @@ export async function registerSessionRoutes(app: FastifyInstance, container: App
       };
 
       await container.sessionHistoryStore.create(session);
-      runInBackground(container, session, {
-        confluenceAdapter,
-        repositoryAdapter,
-        likec4Parser: container.likec4Parser,
-        llmProvider,
-        changeEngine,
-        architectureRuleStore: container.architectureRuleStore,
-      });
+      runSessionInBackground(container, session, ports);
 
       reply.code(202);
       return { sessionId: session.id };
@@ -123,7 +107,14 @@ export async function registerSessionRoutes(app: FastifyInstance, container: App
 
     send('snapshot', toSessionView(initial));
 
-    if (initial.pipelineState.status === 'completed' || initial.pipelineState.status === 'failed') {
+    // 'paused-for-user' — тоже терминально для ЭТОГО соединения: дальше ничего не произойдёт, пока
+    // пользователь не ответит на вопрос через отдельный роут (см. questions.ts), а тот запускает
+    // pipeline заново, и фронтенд откроет новый EventSource, а не будет ждать в этом же.
+    if (
+      initial.pipelineState.status === 'completed' ||
+      initial.pipelineState.status === 'failed' ||
+      initial.pipelineState.status === 'paused-for-user'
+    ) {
       reply.raw.end();
       return;
     }
@@ -145,7 +136,8 @@ export async function registerSessionRoutes(app: FastifyInstance, container: App
   });
 }
 
-function runInBackground(container: AppContainer, session: SessionRecord, ports: OrchestratorPorts): void {
+/** Используется и при создании сессии, и при возобновлении после ответа на вопрос (см. questions.ts). */
+export function runSessionInBackground(container: AppContainer, session: SessionRecord, ports: FullOrchestratorPorts): void {
   container.pipelineOrchestrator
     .run({
       session,
@@ -153,14 +145,17 @@ function runInBackground(container: AppContainer, session: SessionRecord, ports:
       sessionStore: container.sessionHistoryStore,
       onStatus: (status) => container.sessionEvents.publish(session.id, { type: 'status', status }),
     })
-    .then(() => container.sessionEvents.publish(session.id, { type: 'completed' }))
+    .then((finished) => {
+      const type = finished.pipelineState.status === 'paused-for-user' ? 'paused' : 'completed';
+      container.sessionEvents.publish(session.id, { type });
+    })
     .catch((err: unknown) => {
       container.technicalLogger.error({ err, sessionId: session.id }, 'Pipeline run failed');
       container.sessionEvents.publish(session.id, { type: 'failed' });
     });
 }
 
-function toSessionView(session: SessionRecord): SessionView {
+export function toSessionView(session: SessionRecord): SessionView {
   const outputs = session.pipelineState.stageOutputs;
   return {
     id: session.id,
@@ -180,7 +175,9 @@ function toSessionView(session: SessionRecord): SessionView {
       extractedRequirementCount: outputs.extractedRequirements?.length,
       matchedRequirementCount: outputs.entityMatches?.filter((m) => m.matchedElementId).length,
       changeCandidateCount: outputs.changeCandidates?.length,
+      ambiguityCount: outputs.ambiguities?.length,
     },
+    questions: outputs.ambiguities ?? [],
   };
 }
 
@@ -215,26 +212,6 @@ function sessionNotFoundError(id: string): UserFacingError {
     title: 'Сессия анализа не найдена',
     likelyCause: `Сессия с id "${id}" не существует.`,
     suggestedAction: 'Запустите новый анализ из карточки проекта.',
-    retryable: false,
-  };
-}
-
-function confluenceNotConfiguredError(): UserFacingError {
-  return {
-    id: 'sessions.confluence-not-configured',
-    title: 'Confluence не подключён',
-    likelyCause: 'В настройках проекта не указан адрес Confluence или не сохранён токен доступа.',
-    suggestedAction: 'Откройте настройки проекта и подключите Confluence перед запуском анализа.',
-    retryable: false,
-  };
-}
-
-function aiNotConfiguredError(): UserFacingError {
-  return {
-    id: 'sessions.ai-not-configured',
-    title: 'AI-провайдер не подключён',
-    likelyCause: 'В настройках проекта не сохранён OpenAI API key.',
-    suggestedAction: 'Откройте настройки проекта и подключите AI-провайдера перед запуском анализа.',
     retryable: false,
   };
 }

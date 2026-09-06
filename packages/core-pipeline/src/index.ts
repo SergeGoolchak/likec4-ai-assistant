@@ -7,3 +7,6 @@ export * from './stages/build-architecture-graph.js';
 export * from './stages/extract-requirements.js';
 export * from './stages/entity-matching.js';
 export * from './stages/gap-analysis.js';
+export * from './stages/ambiguity-detection.js';
+export * from './stages/user-clarification.js';
+export * from './pending-questions.js';

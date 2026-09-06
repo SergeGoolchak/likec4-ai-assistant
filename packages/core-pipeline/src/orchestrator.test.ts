@@ -124,6 +124,8 @@ class FakeLLMProvider implements LLMProvider {
 }
 
 class FakeChangeEngine implements ChangeEngine {
+  constructor(private options: { needsClarification?: boolean } = {}) {}
+
   async matchEntities(input: EntityMatchInput): Promise<EntityMatchResult[]> {
     return input.requirements.map((r) => ({ requirementId: r.id, matchedElementId: 'orderService', confidence: 0.9, rationale: 'fake match' }));
   }
@@ -135,7 +137,7 @@ class FakeChangeEngine implements ChangeEngine {
       matchedElementId: 'orderService',
       description: 'fake candidate',
       sources: [],
-      needsClarification: false,
+      needsClarification: this.options.needsClarification ?? false,
     }));
   }
   async resolveConflicts(candidates: ArchitectureChangeCandidate[]): Promise<ConflictResolution[]> {
@@ -172,7 +174,7 @@ async function withStore(fn: (store: SqliteSessionHistoryStore) => Promise<void>
   }
 }
 
-test('runs stages 1-8 end to end, persisting after each and marking the session completed', async () => {
+test('runs stages 1-10 end to end, persisting after each and marking the session completed when there is nothing to clarify', async () => {
   await withStore(async (sessionStore) => {
     const confluenceAdapter = new FakeConfluenceAdapter();
     const repositoryAdapter = new FakeRepositoryAdapter();
@@ -201,6 +203,7 @@ test('runs stages 1-8 end to end, persisting after each and marking the session 
       'extract-requirements',
       'entity-matching',
       'gap-analysis',
+      'ambiguity-detection',
     ]);
     assert.equal(result.pipelineState.stageOutputs.confluenceContent?.title, 'Payment API Spec');
     assert.equal(result.pipelineState.stageOutputs.specification?.chunks.length, 1);
@@ -209,12 +212,62 @@ test('runs stages 1-8 end to end, persisting after each and marking the session 
     assert.equal(result.pipelineState.stageOutputs.extractedRequirements?.length, 1);
     assert.equal(result.pipelineState.stageOutputs.entityMatches?.[0]?.matchedElementId, 'orderService');
     assert.equal(result.pipelineState.stageOutputs.changeCandidates?.length, 1);
-    assert.equal(result.userFacingTimeline.length, 7);
+    // Нечего разрешать конфликтами/уверенностью — ambiguities пустой, гейт user-clarification
+    // проходится в этом же вызове run() без остановки (isDone уже true для пустого списка).
+    assert.deepEqual(result.pipelineState.stageOutputs.ambiguities, []);
+    assert.equal(result.userFacingTimeline.length, 8);
     assert.equal(result.confluencePageVersion, 1, 'confluencePageVersion should sync from the fetched page once load-confluence completes');
 
     // Persisted, not just returned in memory.
     const persisted = await sessionStore.get('s1');
     assert.equal(persisted?.pipelineState.status, 'completed');
+  });
+});
+
+test('pauses at user-clarification when ambiguity-detection raises an open question, then resumes and completes once it is answered', async () => {
+  await withStore(async (sessionStore) => {
+    const ports = {
+      confluenceAdapter: new FakeConfluenceAdapter(),
+      repositoryAdapter: new FakeRepositoryAdapter(),
+      likec4Parser: new FakeLikeC4Parser(),
+      llmProvider: new FakeLLMProvider(),
+      changeEngine: new FakeChangeEngine({ needsClarification: true }),
+    };
+
+    const session = fixtureSession();
+    await sessionStore.create(session);
+
+    const orchestrator = new PipelineOrchestrator();
+    const paused = await orchestrator.run({ session, ports, sessionStore });
+
+    assert.equal(paused.pipelineState.status, 'paused-for-user');
+    assert.equal(paused.pipelineState.currentStage, 'user-clarification');
+    assert.equal(paused.pipelineState.stageOutputs.ambiguities?.length, 1);
+    assert.equal(paused.pipelineState.stageOutputs.ambiguities?.[0]?.status, 'open');
+    assert.deepEqual(paused.pipelineState.pendingQuestionIds, [paused.pipelineState.stageOutputs.ambiguities![0]!.id]);
+
+    const persisted = await sessionStore.get('s1');
+    assert.equal(persisted?.pipelineState.status, 'paused-for-user');
+
+    // Simulate the answer route: flip the one open question to answered and persist, exactly as
+    // apps/server/src/routes/questions.ts does, then re-run the orchestrator against the fresh state.
+    const question = paused.pipelineState.stageOutputs.ambiguities![0]!;
+    const answered = {
+      ...paused,
+      pipelineState: {
+        ...paused.pipelineState,
+        stageOutputs: {
+          ...paused.pipelineState.stageOutputs,
+          ambiguities: [{ ...question, status: 'answered' as const, answer: { selectedOptionId: 'confirm-match', answeredAt: new Date().toISOString() } }],
+        },
+      },
+    };
+    await sessionStore.update('s1', answered);
+
+    const resumeOrchestrator = new PipelineOrchestrator();
+    const result = await resumeOrchestrator.run({ session: answered, ports, sessionStore });
+
+    assert.equal(result.pipelineState.status, 'completed');
   });
 });
 

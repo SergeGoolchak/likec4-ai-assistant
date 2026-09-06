@@ -106,3 +106,11 @@ export function createSession(projectId: string, input: { confluencePageId: stri
 export function getSession(sessionId: string): Promise<SessionView> {
   return request(`/api/sessions/${sessionId}`);
 }
+
+export function answerQuestion(
+  sessionId: string,
+  questionId: string,
+  input: { selectedOptionId?: string; freeText?: string; markUnknown?: boolean; defer?: boolean },
+): Promise<SessionView> {
+  return request(`/api/sessions/${sessionId}/questions/${questionId}/answer`, { method: 'POST', body: JSON.stringify(input) });
+}

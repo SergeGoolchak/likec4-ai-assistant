@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { UserFacingStatus } from '@likec4-ai/core-domain';
 
-export type SessionEvent = { type: 'status'; status: UserFacingStatus } | { type: 'completed' } | { type: 'failed' };
+export type SessionEvent = { type: 'status'; status: UserFacingStatus } | { type: 'completed' } | { type: 'paused' } | { type: 'failed' };
 
 /**
  * In-process pub/sub keyed by sessionId — единственный процесс (ФТ28), так

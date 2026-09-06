@@ -39,7 +39,7 @@ npm start
 - `packages/change-engine` — `LLMChangeEngine`: сопоставление извлечённых требований с существующими элементами архитектуры (лексический предфильтр + LLM-судья + hallucination guard), определение gap'ов и типов изменений (ФТ7 "не дублировать"), разрешение конфликтов между кандидатами.
 - `packages/confluence-adapter` — `ConfluenceServerAdapter` (Server/DC, PAT) + разбор storage-format в `ConfluenceSection[]`. Пока не проверен на реальном сервере (см. explain.md).
 - `packages/repo-bitbucket-adapter` — `BitbucketServerAdapter` (Server/DC, PAT, read-only): листинг/чтение файлов в заданной `likec4Directory`, определение branch/commit.
-- `packages/core-pipeline` — `PipelineOrchestrator` и стадии 1-8 AI pipeline (Load Confluence → Parse Specification → Load LikeC4 → Build Architecture Graph → Extract Requirements → Entity Matching → Gap Analysis), с персистентностью после каждой стадии и естественной возобновляемостью после падения процесса.
+- `packages/core-pipeline` — `PipelineOrchestrator` и стадии 1-10 AI pipeline (Load Confluence → Parse Specification → Load LikeC4 → Build Architecture Graph → Extract Requirements → Entity Matching → Gap Analysis → Ambiguity Detection → User Clarification), с персистентностью после каждой стадии, естественной возобновляемостью после падения процесса и гейт-стадиями (`PipelineStageDef.isGate`), которые физически ставят сессию на паузу (`paused-for-user`) в ожидании ответа пользователя.
 
 ## Проверка
 
