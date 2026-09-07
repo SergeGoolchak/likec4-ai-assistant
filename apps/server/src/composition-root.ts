@@ -4,6 +4,7 @@ import { LocalRepositoryAdapter } from '@likec4-ai/repo-local-adapter';
 import { ConfluenceServerAdapter } from '@likec4-ai/confluence-adapter';
 import { OpenAILLMProvider, OpenAIEmbeddingProvider } from '@likec4-ai/llm-openai';
 import { LLMChangeEngine } from '@likec4-ai/change-engine';
+import { LLMProposalGenerator } from '@likec4-ai/proposal-generator';
 import {
   openDatabase,
   SqliteProjectStore,
@@ -21,6 +22,7 @@ import type {
   LikeC4Validator,
   LLMProvider,
   ProjectStore,
+  ProposalGenerator,
   RepositoryAdapter,
   SecretsVault,
   SessionHistoryStore,
@@ -54,6 +56,7 @@ export interface AppContainer {
   createLLMProvider(options: { apiKey?: string; model?: string; baseUrl?: string }): LLMProvider;
   createEmbeddingProvider(options: { apiKey?: string; baseUrl?: string }): EmbeddingProvider;
   createChangeEngine(llmProvider: LLMProvider): ChangeEngine;
+  createProposalGenerator(llmProvider: LLMProvider): ProposalGenerator;
 }
 
 export async function createAppContainer(config: AppConfig): Promise<AppContainer> {
@@ -83,5 +86,6 @@ export async function createAppContainer(config: AppConfig): Promise<AppContaine
     createLLMProvider: (options) => new OpenAILLMProvider({ ...options, baseUrl: options.baseUrl ?? config.openaiBaseUrl }),
     createEmbeddingProvider: (options) => new OpenAIEmbeddingProvider({ ...options, baseUrl: options.baseUrl ?? config.openaiBaseUrl }),
     createChangeEngine: (llmProvider) => new LLMChangeEngine({ llmProvider }),
+    createProposalGenerator: (llmProvider) => new LLMProposalGenerator({ llmProvider }),
   };
 }

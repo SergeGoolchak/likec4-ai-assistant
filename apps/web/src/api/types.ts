@@ -10,6 +10,12 @@ export type {
   ClarificationQuestion,
   QuestionOption,
   QuestionStatus,
+  Proposal,
+  ProposalItem,
+  ProposalItemType,
+  ItemDecisionStatus,
+  Explanation,
+  SourceReference,
 } from '@likec4-ai/core-domain';
 
 export interface ProjectModelSummary {
@@ -59,4 +65,5 @@ export interface SessionView {
   error?: import('@likec4-ai/core-domain').UserFacingError;
   summary: SessionSummary;
   questions: import('@likec4-ai/core-domain').ClarificationQuestion[];
+  proposal?: import('@likec4-ai/core-domain').Proposal;
 }

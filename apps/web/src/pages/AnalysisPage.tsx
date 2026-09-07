@@ -17,6 +17,12 @@ const STAGE_ORDER: { id: PipelineStageId; label: string; isDone: (s: SessionView
   { id: 'gap-analysis', label: 'Анализ пробелов в архитектуре', isDone: (s) => s.summary.changeCandidateCount !== undefined },
   { id: 'ambiguity-detection', label: 'Выявление неоднозначностей', isDone: (s) => s.summary.ambiguityCount !== undefined },
   { id: 'user-clarification', label: 'Уточнения от вас', isDone: (s) => s.questions.every((q) => q.status !== 'open') },
+  { id: 'proposal-generation', label: 'Формирование предложений', isDone: (s) => s.proposal !== undefined },
+  {
+    id: 'user-review',
+    label: 'Проверка предложений вами',
+    isDone: (s) => (s.proposal?.items ?? []).every((item) => item.decision === 'approved' || item.decision === 'rejected' || item.decision === 'edited'),
+  },
 ];
 
 export function AnalysisPage() {
@@ -103,6 +109,21 @@ export function AnalysisPage() {
         </div>
       )}
 
+      {session.status === 'paused-for-user' && session.currentStage === 'user-review' && (
+        <Card className="mt-6 bg-amber-50 ring-amber-200">
+          <p className="text-sm font-medium text-amber-700">
+            Сформировано предложений: {session.proposal?.items.length ?? 0}. Нужно принять решение по каждому, прежде чем pipeline
+            продолжит работу.
+          </p>
+          <Link
+            to={`/sessions/${session.id}/proposal`}
+            className="mt-2 inline-block rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            Перейти к предложениям
+          </Link>
+        </Card>
+      )}
+
       {session.status === 'failed' && session.error && (
         <div className="mt-6">
           <ErrorState error={session.error} />
@@ -123,6 +144,13 @@ export function AnalysisPage() {
             <Stat label="Сопоставлено с существующим" value={session.summary.matchedRequirementCount} />
             <Stat label="Предложений изменений" value={session.summary.changeCandidateCount} />
           </div>
+          {session.proposal && session.proposal.items.length > 0 && (
+            <div className="mt-4 grid grid-cols-3 gap-4 border-t border-slate-100 pt-4">
+              <Stat label="Принято" value={session.proposal.items.filter((i) => i.decision === 'approved').length} />
+              <Stat label="Отклонено" value={session.proposal.items.filter((i) => i.decision === 'rejected').length} />
+              <Stat label="Отредактировано" value={session.proposal.items.filter((i) => i.decision === 'edited').length} />
+            </div>
+          )}
           {Boolean(session.summary.existingModelDiagnosticsCount) && (
             <p className="mt-3 text-xs text-amber-600">
               В существующей модели найдено диагностик: {session.summary.existingModelDiagnosticsCount}

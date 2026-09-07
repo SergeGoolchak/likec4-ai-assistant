@@ -6,6 +6,7 @@ import type {
   LikeC4Parser,
   LLMProvider,
   ProjectRecord,
+  ProposalGenerator,
   RepositoryAdapter,
   UserFacingError,
 } from '@likec4-ai/core-domain';
@@ -23,6 +24,7 @@ export interface FullOrchestratorPorts extends OrchestratorPorts {
   likec4Parser: LikeC4Parser;
   llmProvider: LLMProvider;
   changeEngine: ChangeEngine;
+  proposalGenerator: ProposalGenerator;
   architectureRuleStore: ArchitectureRuleStore;
 }
 
@@ -51,6 +53,7 @@ export async function buildOrchestratorPorts(container: AppContainer, project: P
   const confluenceAdapter = container.createConfluenceAdapter({ baseUrl: project.confluenceBaseUrl, token: confluenceToken });
   const llmProvider = container.createLLMProvider({ apiKey: openaiApiKey, model: project.aiModel, baseUrl: project.aiBaseUrl });
   const changeEngine = container.createChangeEngine(llmProvider);
+  const proposalGenerator = container.createProposalGenerator(llmProvider);
 
   return {
     ok: true,
@@ -60,6 +63,7 @@ export async function buildOrchestratorPorts(container: AppContainer, project: P
       likec4Parser: container.likec4Parser,
       llmProvider,
       changeEngine,
+      proposalGenerator,
       architectureRuleStore: container.architectureRuleStore,
     },
   };

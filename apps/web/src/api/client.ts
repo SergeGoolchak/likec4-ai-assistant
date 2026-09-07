@@ -107,6 +107,18 @@ export function getSession(sessionId: string): Promise<SessionView> {
   return request(`/api/sessions/${sessionId}`);
 }
 
+export function decideProposalItem(
+  sessionId: string,
+  itemId: string,
+  input: { decision: 'approved' | 'rejected' | 'edited'; decisionNote?: string; proposedLikeC4Code?: string },
+): Promise<SessionView> {
+  return request(`/api/sessions/${sessionId}/proposal/items/${itemId}/decision`, { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function regenerateProposalItem(sessionId: string, itemId: string): Promise<SessionView> {
+  return request(`/api/sessions/${sessionId}/proposal/items/${itemId}/regenerate`, { method: 'POST' });
+}
+
 export function answerQuestion(
   sessionId: string,
   questionId: string,

@@ -9,4 +9,6 @@ export * from './stages/entity-matching.js';
 export * from './stages/gap-analysis.js';
 export * from './stages/ambiguity-detection.js';
 export * from './stages/user-clarification.js';
+export * from './stages/proposal-generation.js';
+export * from './stages/user-review.js';
 export * from './pending-questions.js';

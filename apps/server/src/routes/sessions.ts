@@ -5,6 +5,7 @@ import type {
   ClarificationQuestion,
   PipelineStageId,
   PipelineStatus,
+  Proposal,
   SessionRecord,
   UserFacingError,
   UserFacingEvent,
@@ -40,6 +41,8 @@ export interface SessionView {
   summary: SessionSummary;
   /** Открытые и уже отвеченные вопросы стадии 9 — непустой список открытых означает, что pipeline стоит на паузе (см. PipelineStatus.paused-for-user). */
   questions: ClarificationQuestion[];
+  /** Результат стадии 11 — есть, начиная с paused-for-user на user-review (стадия 12) и до конца. */
+  proposal?: Proposal;
 }
 
 export async function registerSessionRoutes(app: FastifyInstance, container: AppContainer): Promise<void> {
@@ -178,6 +181,7 @@ export function toSessionView(session: SessionRecord): SessionView {
       ambiguityCount: outputs.ambiguities?.length,
     },
     questions: outputs.ambiguities ?? [],
+    proposal: outputs.proposal,
   };
 }
 

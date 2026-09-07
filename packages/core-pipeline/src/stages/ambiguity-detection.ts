@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { ArchitectureChangeCandidate, ClarificationQuestion, ConflictNote } from '@likec4-ai/core-domain';
+import type { ArchitectureChangeCandidate, ClarificationQuestion, ConflictNote, ElementId } from '@likec4-ai/core-domain';
 import type { PipelineStageDef } from '../stage.js';
 
 /**
@@ -29,28 +29,43 @@ export const ambiguityDetectionStage: PipelineStageDef = {
       resolutions.filter((r) => r.remainingConflict).map((r) => [r.candidateId, r.remainingConflict!]),
     );
 
-    const ambiguities: ClarificationQuestion[] = [];
+    // Один вопрос на ГРУППУ конфликтующих кандидатов, а не по одному на каждого — иначе для
+    // конфликта из N требований пользователь увидел бы N раз буквально один и тот же вопрос.
+    // resolveConflicts уже группирует по matchedElementId внутри себя; регруппируем здесь по
+    // тому же ключу, а не изобретаем новый способ связать кандидатов из одной группы.
+    const conflictGroups = new Map<ElementId, ArchitectureChangeCandidate[]>();
     for (const candidate of candidates) {
-      const conflict = remainingConflictByCandidateId.get(candidate.id);
-      if (conflict) {
-        ambiguities.push(conflictQuestion(candidate, conflict));
-      } else if (candidate.needsClarification) {
-        ambiguities.push(lowConfidenceQuestion(candidate));
-      }
+      if (!remainingConflictByCandidateId.has(candidate.id) || !candidate.matchedElementId) continue;
+      const group = conflictGroups.get(candidate.matchedElementId) ?? [];
+      group.push(candidate);
+      conflictGroups.set(candidate.matchedElementId, group);
+    }
+
+    const ambiguities: ClarificationQuestion[] = [];
+    const candidateIdsInConflict = new Set<string>();
+    for (const [elementId, group] of conflictGroups) {
+      const conflict = remainingConflictByCandidateId.get(group[0]!.id)!;
+      ambiguities.push(conflictQuestion(elementId, group, conflict));
+      for (const candidate of group) candidateIdsInConflict.add(candidate.id);
+    }
+
+    for (const candidate of candidates) {
+      if (candidateIdsInConflict.has(candidate.id)) continue;
+      if (candidate.needsClarification) ambiguities.push(lowConfidenceQuestion(candidate));
     }
     return { ambiguities };
   },
 };
 
-function conflictQuestion(candidate: ArchitectureChangeCandidate, conflict: ConflictNote): ClarificationQuestion {
+function conflictQuestion(matchedElementId: ElementId, group: ArchitectureChangeCandidate[], conflict: ConflictNote): ClarificationQuestion {
   return {
     id: randomUUID(),
     originKind: 'user-decision-needed',
-    text: `Несколько требований независимо предлагают изменить один и тот же элемент архитектуры (${candidate.matchedElementId}). Как поступить?`,
+    text: `${group.length} требования независимо предлагают изменить один и тот же элемент архитектуры (${matchedElementId}). Как поступить?`,
     whyNeeded: conflict.description,
-    relatedProposalItemIds: [candidate.id],
+    relatedProposalItemIds: group.map((c) => c.id),
     options: [
-      { id: 'keep-separate', label: 'Оставить оба изменения отдельно' },
+      { id: 'keep-separate', label: 'Оставить изменения отдельно друг от друга' },
       { id: 'merge', label: 'Считать это одним изменением' },
     ],
     allowFreeText: true,

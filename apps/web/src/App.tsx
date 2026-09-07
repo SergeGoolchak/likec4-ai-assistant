@@ -8,6 +8,7 @@ import { ConfluenceSettingsPage } from './pages/ConfluenceSettingsPage';
 import { AISettingsPage } from './pages/AISettingsPage';
 import { NewTaskPage } from './pages/NewTaskPage';
 import { AnalysisPage } from './pages/AnalysisPage';
+import { ProposalPage } from './pages/ProposalPage';
 
 export function App() {
   return (
@@ -21,6 +22,7 @@ export function App() {
         <Route path="/projects/:id/ai-settings" element={<AISettingsPage />} />
         <Route path="/projects/:id/tasks/new" element={<NewTaskPage />} />
         <Route path="/sessions/:id" element={<AnalysisPage />} />
+        <Route path="/sessions/:id/proposal" element={<ProposalPage />} />
       </Route>
     </Routes>
   );

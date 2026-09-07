@@ -17,6 +17,7 @@
     "@likec4-ai/likec4-adapter": "*",
     "@likec4-ai/llm-openai": "*",
     "@likec4-ai/persistence": "*",
+    "@likec4-ai/proposal-generator": "*",
     "@likec4-ai/repo-local-adapter": "*",
     "@likec4-ai/secrets": "*",
     "fastify": "^5.2.0",

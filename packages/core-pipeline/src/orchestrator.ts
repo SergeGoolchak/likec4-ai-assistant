@@ -8,10 +8,12 @@ import { entityMatchingStage } from './stages/entity-matching.js';
 import { gapAnalysisStage } from './stages/gap-analysis.js';
 import { ambiguityDetectionStage } from './stages/ambiguity-detection.js';
 import { userClarificationStage } from './stages/user-clarification.js';
+import { proposalGenerationStage } from './stages/proposal-generation.js';
+import { userReviewStage } from './stages/user-review.js';
 import { computePendingQuestionIds } from './pending-questions.js';
 import type { OrchestratorPorts, PipelineStageDef } from './stage.js';
 
-/** Стадии 1-10 плана. Стадия 11 (Proposal Generation, Milestone 8) присоединится следующей. */
+/** Стадии 1-12 плана. Стадия 13 (LikeC4 Generation, Milestone 9) присоединится следующей. */
 export const STAGES: PipelineStageDef[] = [
   loadConfluenceStage,
   parseSpecificationStage,
@@ -22,6 +24,8 @@ export const STAGES: PipelineStageDef[] = [
   gapAnalysisStage,
   ambiguityDetectionStage,
   userClarificationStage,
+  proposalGenerationStage,
+  userReviewStage,
 ];
 
 export interface RunOptions {
@@ -93,15 +97,21 @@ function advance(session: SessionRecord, stage: PipelineStageDef, partialOutputs
   // это метаданные сессии, а не вывод стадии сам по себе, но узнаём мы его
   // только после того как load-confluence реально сходит за страницей.
   const confluencePageVersion = partialOutputs.confluenceContent?.version ?? session.confluencePageVersion;
+  const stageOutputs = { ...session.pipelineState.stageOutputs, ...partialOutputs };
 
   return {
     ...session,
     confluencePageVersion,
+    // Зеркала для удобного доступа без похода в pipelineState.stageOutputs (History и т.п.) —
+    // единственный источник истины всё равно stageOutputs; синхронизируются здесь же, в одном
+    // месте, а не мутируются отдельно в каждом роуте, который меняет ambiguities/proposal.
+    questions: stageOutputs.ambiguities ?? session.questions,
+    proposalId: stageOutputs.proposal?.id ?? session.proposalId,
     pipelineState: {
       ...session.pipelineState,
       currentStage: stage.id,
       status: isLastStage ? 'completed' : 'running',
-      stageOutputs: { ...session.pipelineState.stageOutputs, ...partialOutputs },
+      stageOutputs,
     },
     userFacingTimeline: [...session.userFacingTimeline, { at, message: stage.label }],
   };

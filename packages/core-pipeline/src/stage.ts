@@ -7,11 +7,12 @@ import type {
   LLMProvider,
   PipelineState,
   PipelineStageId,
+  ProposalGenerator,
   RepositoryAdapter,
   SessionRecord,
 } from '@likec4-ai/core-domain';
 
-/** Порты, нужные стадиям 1-10 (Milestone 7 переиспользует `changeEngine`, новых портов не добавляет). Стадии 11+ добавят свои по мере реализации в следующих milestones. */
+/** Порты, нужные стадиям 1-12 (Milestone 7 переиспользует `changeEngine`, Milestone 8 добавляет `proposalGenerator`). Стадии 13+ добавят свои по мере реализации в следующих milestones. */
 export interface OrchestratorPorts {
   confluenceAdapter: ConfluenceAdapter;
   repositoryAdapter: RepositoryAdapter;
@@ -19,8 +20,10 @@ export interface OrchestratorPorts {
   /** LLM-зависимые стадии 6-8 (Milestone 6) не работают без него — опционален, чтобы стадии 1-5 оставались тестируемы без AI provider вообще. */
   llmProvider?: LLMProvider;
   changeEngine?: ChangeEngine;
+  /** Стадия 11 (Milestone 8) — опционален по той же причине, что и changeEngine. */
+  proposalGenerator?: ProposalGenerator;
   architectureRuleStore?: ArchitectureRuleStore;
-  /** Global + Project Knowledge Base — участвуют в стадии 6 как дополнительный контекст, не блокируют pipeline при отсутствии. */
+  /** Global + Project Knowledge Base — участвуют в стадиях 6 и 11 как дополнительный контекст, не блокируют pipeline при отсутствии. */
   knowledgeProviders?: KnowledgeProvider[];
 }
 
@@ -43,7 +46,7 @@ export interface PipelineStageDef {
   isDone(stageOutputs: PipelineState['stageOutputs']): boolean;
   run(state: PipelineState, ctx: StageContext): Promise<Partial<PipelineState['stageOutputs']>>;
   /**
-   * Стадии-гейты (10. User Clarification, позже — 12. User Review) ждут внешнего
+   * Стадии-гейты (10. User Clarification, 12. User Review) ждут внешнего
    * события (ответ пользователя), а не что-то вычисляют. Когда `isDone` ещё
    * false, оркестратор не вызывает `run()` для такой стадии — вместо этого
    * останавливается с `status: 'paused-for-user'` (см. orchestrator.ts). `run()`

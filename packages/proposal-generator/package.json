@@ -1,5 +1,5 @@
 {
-  "name": "@likec4-ai/core-pipeline",
+  "name": "@likec4-ai/proposal-generator",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -10,10 +10,10 @@
     "test": "tsx --test 'src/**/*.test.ts'"
   },
   "dependencies": {
+    "@likec4-ai/context-builder": "*",
     "@likec4-ai/core-domain": "*"
   },
   "devDependencies": {
-    "@likec4-ai/persistence": "*",
     "@types/node": "^22.10.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"

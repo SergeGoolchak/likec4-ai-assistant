@@ -20,6 +20,9 @@ import type {
   LLMMessage,
   LLMProvider,
   LLMResult,
+  ProposalGenerationInput,
+  ProposalGenerator,
+  ProposalItem,
   RepositoryAdapter,
   RepositoryFile,
   SessionRecord,
@@ -145,6 +148,20 @@ class FakeChangeEngine implements ChangeEngine {
   }
 }
 
+class FakeProposalGenerator implements ProposalGenerator {
+  async generate(input: ProposalGenerationInput): Promise<ProposalItem[]> {
+    return input.candidates.map((c) => ({
+      id: c.id,
+      type: c.type,
+      title: 'Fake proposal item',
+      targetElementId: c.matchedElementId,
+      explanation: { what: 'fake', why: 'fake', impact: 'fake', confidence: 0.9, assumptions: [] },
+      sources: c.sources.length > 0 ? c.sources : [{ kind: 'existing-likec4-element' as const, refId: 'orderService', label: 'fake source' }],
+      decision: 'pending' as const,
+    }));
+  }
+}
+
 function fixtureSession(): SessionRecord {
   return {
     id: 's1',
@@ -174,27 +191,27 @@ async function withStore(fn: (store: SqliteSessionHistoryStore) => Promise<void>
   }
 }
 
-test('runs stages 1-10 end to end, persisting after each and marking the session completed when there is nothing to clarify', async () => {
+test('runs stages 1-11 straight through when nothing needs clarifying, then pauses at user-review until the item is decided', async () => {
   await withStore(async (sessionStore) => {
     const confluenceAdapter = new FakeConfluenceAdapter();
     const repositoryAdapter = new FakeRepositoryAdapter();
     const likec4Parser = new FakeLikeC4Parser();
     const llmProvider = new FakeLLMProvider();
     const changeEngine = new FakeChangeEngine();
+    const proposalGenerator = new FakeProposalGenerator();
     const statuses: UserFacingStatus[] = [];
 
     const session = fixtureSession();
     await sessionStore.create(session);
 
     const orchestrator = new PipelineOrchestrator();
-    const result = await orchestrator.run({
+    const paused = await orchestrator.run({
       session,
-      ports: { confluenceAdapter, repositoryAdapter, likec4Parser, llmProvider, changeEngine },
+      ports: { confluenceAdapter, repositoryAdapter, likec4Parser, llmProvider, changeEngine, proposalGenerator },
       sessionStore,
       onStatus: (s) => statuses.push(s),
     });
 
-    assert.equal(result.pipelineState.status, 'completed');
     assert.deepEqual(statuses.map((s) => s.stage), [
       'load-confluence',
       'parse-specification',
@@ -204,27 +221,64 @@ test('runs stages 1-10 end to end, persisting after each and marking the session
       'entity-matching',
       'gap-analysis',
       'ambiguity-detection',
+      'proposal-generation',
     ]);
-    assert.equal(result.pipelineState.stageOutputs.confluenceContent?.title, 'Payment API Spec');
-    assert.equal(result.pipelineState.stageOutputs.specification?.chunks.length, 1);
-    assert.equal(result.pipelineState.stageOutputs.existingFiles?.length, 1);
-    assert.ok(result.pipelineState.stageOutputs.architectureGraph?.elements.get('orderService'));
-    assert.equal(result.pipelineState.stageOutputs.extractedRequirements?.length, 1);
-    assert.equal(result.pipelineState.stageOutputs.entityMatches?.[0]?.matchedElementId, 'orderService');
-    assert.equal(result.pipelineState.stageOutputs.changeCandidates?.length, 1);
+    assert.equal(paused.pipelineState.stageOutputs.confluenceContent?.title, 'Payment API Spec');
+    assert.equal(paused.pipelineState.stageOutputs.specification?.chunks.length, 1);
+    assert.equal(paused.pipelineState.stageOutputs.existingFiles?.length, 1);
+    assert.ok(paused.pipelineState.stageOutputs.architectureGraph?.elements.get('orderService'));
+    assert.equal(paused.pipelineState.stageOutputs.extractedRequirements?.length, 1);
+    assert.equal(paused.pipelineState.stageOutputs.entityMatches?.[0]?.matchedElementId, 'orderService');
+    assert.equal(paused.pipelineState.stageOutputs.changeCandidates?.length, 1);
     // Нечего разрешать конфликтами/уверенностью — ambiguities пустой, гейт user-clarification
     // проходится в этом же вызове run() без остановки (isDone уже true для пустого списка).
-    assert.deepEqual(result.pipelineState.stageOutputs.ambiguities, []);
-    assert.equal(result.userFacingTimeline.length, 8);
-    assert.equal(result.confluencePageVersion, 1, 'confluencePageVersion should sync from the fetched page once load-confluence completes');
+    assert.deepEqual(paused.pipelineState.stageOutputs.ambiguities, []);
+    assert.equal(paused.confluencePageVersion, 1, 'confluencePageVersion should sync from the fetched page once load-confluence completes');
+
+    // proposal-generation дало один item со статусом 'pending' — гейт user-review не пропускает
+    // дальше, пока item не получит финальное решение человека (approved/rejected/edited).
+    assert.equal(paused.pipelineState.status, 'paused-for-user');
+    assert.equal(paused.pipelineState.currentStage, 'user-review');
+    assert.equal(paused.pipelineState.stageOutputs.proposal?.items.length, 1);
+    assert.equal(paused.pipelineState.stageOutputs.proposal?.items[0]?.decision, 'pending');
+    assert.equal(paused.proposalId, paused.pipelineState.stageOutputs.proposal?.id, 'proposalId mirror должен синхронизироваться сразу после proposal-generation');
 
     // Persisted, not just returned in memory.
+    const persistedPaused = await sessionStore.get('s1');
+    assert.equal(persistedPaused?.pipelineState.status, 'paused-for-user');
+
+    // Simulate the decision route: approve the one item and persist, then re-run the orchestrator.
+    const item = paused.pipelineState.stageOutputs.proposal!.items[0]!;
+    const approved = {
+      ...paused,
+      pipelineState: {
+        ...paused.pipelineState,
+        stageOutputs: {
+          ...paused.pipelineState.stageOutputs,
+          proposal: { ...paused.pipelineState.stageOutputs.proposal!, items: [{ ...item, decision: 'approved' as const }] },
+        },
+      },
+    };
+    await sessionStore.update('s1', approved);
+
+    const resumeOrchestrator = new PipelineOrchestrator();
+    const result = await resumeOrchestrator.run({
+      session: approved,
+      ports: { confluenceAdapter, repositoryAdapter, likec4Parser, llmProvider, changeEngine, proposalGenerator },
+      sessionStore,
+    });
+
+    assert.equal(result.pipelineState.status, 'completed');
+    // 9 выполненных стадий (до proposal-generation включительно) + 1 запись о постановке на паузу
+    // на user-review; сам переход paused → completed при повторном run() новую запись не добавляет.
+    assert.equal(result.userFacingTimeline.length, 10);
+
     const persisted = await sessionStore.get('s1');
     assert.equal(persisted?.pipelineState.status, 'completed');
   });
 });
 
-test('pauses at user-clarification when ambiguity-detection raises an open question, then resumes and completes once it is answered', async () => {
+test('pauses at user-clarification when ambiguity-detection raises an open question, then resumes into user-review once it is answered', async () => {
   await withStore(async (sessionStore) => {
     const ports = {
       confluenceAdapter: new FakeConfluenceAdapter(),
@@ -232,6 +286,7 @@ test('pauses at user-clarification when ambiguity-detection raises an open quest
       likec4Parser: new FakeLikeC4Parser(),
       llmProvider: new FakeLLMProvider(),
       changeEngine: new FakeChangeEngine({ needsClarification: true }),
+      proposalGenerator: new FakeProposalGenerator(),
     };
 
     const session = fixtureSession();
@@ -245,6 +300,7 @@ test('pauses at user-clarification when ambiguity-detection raises an open quest
     assert.equal(paused.pipelineState.stageOutputs.ambiguities?.length, 1);
     assert.equal(paused.pipelineState.stageOutputs.ambiguities?.[0]?.status, 'open');
     assert.deepEqual(paused.pipelineState.pendingQuestionIds, [paused.pipelineState.stageOutputs.ambiguities![0]!.id]);
+    assert.deepEqual(paused.questions, paused.pipelineState.stageOutputs.ambiguities, 'session.questions зеркало должно синхронизироваться сразу после ambiguity-detection, а не только после ответа');
 
     const persisted = await sessionStore.get('s1');
     assert.equal(persisted?.pipelineState.status, 'paused-for-user');
@@ -267,7 +323,11 @@ test('pauses at user-clarification when ambiguity-detection raises an open quest
     const resumeOrchestrator = new PipelineOrchestrator();
     const result = await resumeOrchestrator.run({ session: answered, ports, sessionStore });
 
-    assert.equal(result.pipelineState.status, 'completed');
+    // Ответ снял вопрос, но proposal-generation теперь сгенерировал item в статусе 'pending' —
+    // pipeline не завершится сам, пока человек не примет решение по нему (user-review, стадия 12).
+    assert.equal(result.pipelineState.status, 'paused-for-user');
+    assert.equal(result.pipelineState.currentStage, 'user-review');
+    assert.equal(result.pipelineState.stageOutputs.proposal?.items.length, 1);
   });
 });
 
@@ -276,7 +336,14 @@ test('resuming after a simulated process restart continues from the last complet
     const confluenceAdapter = new FakeConfluenceAdapter();
     const repositoryAdapter = new FakeRepositoryAdapter();
     const likec4Parser = new FakeLikeC4Parser();
-    const ports = { confluenceAdapter, repositoryAdapter, likec4Parser, llmProvider: new FakeLLMProvider(), changeEngine: new FakeChangeEngine() };
+    const ports = {
+      confluenceAdapter,
+      repositoryAdapter,
+      likec4Parser,
+      llmProvider: new FakeLLMProvider(),
+      changeEngine: new FakeChangeEngine(),
+      proposalGenerator: new FakeProposalGenerator(),
+    };
 
     const session = fixtureSession();
     await sessionStore.create(session);
@@ -300,7 +367,10 @@ test('resuming after a simulated process restart continues from the last complet
     const secondOrchestrator = new PipelineOrchestrator();
     const result = await secondOrchestrator.run({ session: reloaded, ports, sessionStore });
 
-    assert.equal(result.pipelineState.status, 'completed');
+    // Дошли до конца STAGES без повторного вызова ранних стадий — user-review остаётся на паузе,
+    // пока proposal-item в статусе 'pending', но это уже за пределами того, что проверяет этот тест.
+    assert.equal(result.pipelineState.status, 'paused-for-user');
+    assert.equal(result.pipelineState.currentStage, 'user-review');
     assert.equal(confluenceAdapter.calls, 1, 'load-confluence must not re-run once already done');
     assert.equal(repositoryAdapter.calls, 1, 'load-likec4 must not re-run once already done');
     assert.equal(likec4Parser.calls, 1, 'build-architecture-graph must not re-run once already done');
@@ -344,7 +414,14 @@ test('re-running a failed session retries only the failed stage and can succeed'
     await sessionStore.create(session);
     const orchestrator = new PipelineOrchestrator();
 
-    const ports = { confluenceAdapter, repositoryAdapter, likec4Parser, llmProvider: new FakeLLMProvider(), changeEngine: new FakeChangeEngine() };
+    const ports = {
+      confluenceAdapter,
+      repositoryAdapter,
+      likec4Parser,
+      llmProvider: new FakeLLMProvider(),
+      changeEngine: new FakeChangeEngine(),
+      proposalGenerator: new FakeProposalGenerator(),
+    };
     await assert.rejects(() => orchestrator.run({ session, ports, sessionStore }));
     assert.equal(confluenceAdapter.calls, 1);
 
@@ -353,7 +430,10 @@ test('re-running a failed session retries only the failed stage and can succeed'
     const retryOrchestrator = new PipelineOrchestrator();
     const result = await retryOrchestrator.run({ session: failed, ports, sessionStore });
 
-    assert.equal(result.pipelineState.status, 'completed');
+    // Как и в предыдущем тесте — гейт user-review держит сессию на паузе, пока item 'pending';
+    // здесь важно только то, что упавшая стадия была ровно одна и она успешно повторилась.
+    assert.equal(result.pipelineState.status, 'paused-for-user');
+    assert.equal(result.pipelineState.currentStage, 'user-review');
     assert.equal(confluenceAdapter.calls, 1, 'load-confluence should not be re-run on retry');
     assert.equal(repositoryAdapter.calls, 2, 'load-likec4 is retried once');
   });
