@@ -22,9 +22,15 @@ const SECRET_PATTERNS = [
 ];
 
 // package-lock.json — генерируемый файл, может содержать длинные hex-хэши, случайно похожие
-// на паттерны выше; сам скрипт и его тесты сознательно исключены, чтобы описание паттернов
-// в исходниках не триггерило само себя.
-const EXCLUDED_FILES = new Set(['package-lock.json', 'scripts/check-secret-leaks.mjs']);
+// на паттерны выше; сам скрипт исключён, чтобы описание паттернов в исходнике не триггерило
+// само себя; redact-secrets.test.ts — единственный файл, чья явная задача — содержать
+// реалистично выглядящие (но полностью выдуманные) секреты всех трёх форм, чтобы проверить,
+// что redactSecrets() их действительно распознаёт — намеренное, а не забытое исключение.
+const EXCLUDED_FILES = new Set([
+  'package-lock.json',
+  'scripts/check-secret-leaks.mjs',
+  'packages/core-domain/src/redact-secrets.test.ts',
+]);
 
 const trackedFiles = execFileSync('git', ['ls-files'], { encoding: 'utf8' })
   .split('\n')
