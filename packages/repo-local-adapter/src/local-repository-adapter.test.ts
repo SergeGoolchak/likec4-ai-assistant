@@ -79,6 +79,26 @@ test('writeFiles atomically writes new and overwrites existing files', async () 
   });
 });
 
+test('deleteFiles removes the given files and leaves everything else untouched (Rollback, Milestone 10)', async () => {
+  await withTempProject(async (rootDir) => {
+    await writeFile(join(rootDir, 'keep.c4'), 'keep me');
+    await mkdir(join(rootDir, 'generated'), { recursive: true });
+    await writeFile(join(rootDir, 'generated', 'new.c4'), 'delete me');
+    const adapter = new LocalRepositoryAdapter({ rootDir });
+
+    await adapter.deleteFiles(['generated/new.c4']);
+
+    assert.deepEqual(await adapter.listLikeC4Files(), ['keep.c4']);
+  });
+});
+
+test('deleteFiles does not throw for a path that is already missing (idempotent, like force rm)', async () => {
+  await withTempProject(async (rootDir) => {
+    const adapter = new LocalRepositoryAdapter({ rootDir });
+    await assert.doesNotReject(() => adapter.deleteFiles(['does-not-exist.c4']));
+  });
+});
+
 test('getRevisionInfo returns capturedAt without branch/commit for a non-git folder', async () => {
   await withTempProject(async (rootDir) => {
     const adapter = new LocalRepositoryAdapter({ rootDir });

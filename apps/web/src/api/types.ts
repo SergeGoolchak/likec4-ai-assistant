@@ -16,6 +16,11 @@ export type {
   ItemDecisionStatus,
   Explanation,
   SourceReference,
+  FileDiff,
+  RenderedView,
+  ApplyResult,
+  Snapshot,
+  SessionRecordSummary,
 } from '@likec4-ai/core-domain';
 
 export interface ProjectModelSummary {
@@ -59,6 +64,8 @@ export interface SessionSummary {
   architecturalFindingsCount?: number;
   repairAttemptCount?: number;
   hasBlockingValidationIssues?: boolean;
+  diffFileCount?: number;
+  previewViewCount?: number;
 }
 
 export interface SessionView {
@@ -71,4 +78,12 @@ export interface SessionView {
   summary: SessionSummary;
   questions: import('@likec4-ai/core-domain').ClarificationQuestion[];
   proposal?: import('@likec4-ai/core-domain').Proposal;
+  diff?: import('@likec4-ai/core-domain').FileDiff[];
+  previewViews?: import('@likec4-ai/core-domain').RenderedView[];
+  applyResult?: import('@likec4-ai/core-domain').ApplyResult;
+}
+
+export interface ProjectHistoryResponse {
+  sessions: import('@likec4-ai/core-domain').SessionRecordSummary[];
+  snapshots: import('@likec4-ai/core-domain').Snapshot[];
 }

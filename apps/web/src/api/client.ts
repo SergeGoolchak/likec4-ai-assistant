@@ -1,5 +1,5 @@
 import type { UserFacingError } from '@likec4-ai/core-domain';
-import type { AISettings, ArchitectureRule, ConfluenceSettings, ProjectDetailResponse, ProjectRecord, SessionView } from './types';
+import type { AISettings, ArchitectureRule, ConfluenceSettings, ProjectDetailResponse, ProjectHistoryResponse, ProjectRecord, SessionView } from './types';
 
 /**
  * Любая ошибка API долетает до компонентов либо как реальный UserFacingError
@@ -125,4 +125,20 @@ export function answerQuestion(
   input: { selectedOptionId?: string; freeText?: string; markUnknown?: boolean; defer?: boolean },
 ): Promise<SessionView> {
   return request(`/api/sessions/${sessionId}/questions/${questionId}/answer`, { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function applySession(sessionId: string): Promise<SessionView> {
+  return request(`/api/sessions/${sessionId}/apply`, { method: 'POST' });
+}
+
+export function rollbackSession(sessionId: string): Promise<SessionView> {
+  return request(`/api/sessions/${sessionId}/rollback`, { method: 'POST' });
+}
+
+export function getProjectHistory(projectId: string): Promise<ProjectHistoryResponse> {
+  return request(`/api/projects/${projectId}/history`);
+}
+
+export function restoreSnapshot(projectId: string, snapshotId: string): Promise<{ ok: true }> {
+  return request(`/api/projects/${projectId}/snapshots/${snapshotId}/restore`, { method: 'POST' });
 }

@@ -6,6 +6,7 @@ import type {
   TechnicalValidationResult,
 } from '@likec4-ai/core-domain';
 import { assembleGeneratedFiles } from '../likec4-file-assembler.js';
+import { hasBlockingValidationIssues } from '../validation-gate.js';
 import type { PipelineStageDef } from '../stage.js';
 
 /**
@@ -14,8 +15,9 @@ import type { PipelineStageDef } from '../stage.js';
  */
 const MAX_REPAIR_ATTEMPTS = 2;
 
+/** Вариант `hasBlockingValidationIssues` для мест внутри цикла, где оба уровня уже гарантированно посчитаны — без undefined-ветки. */
 function hasBlockingIssues(technical: TechnicalValidationResult, architectural: ArchitecturalValidationResult): boolean {
-  return !technical.ok || architectural.findings.some((f) => f.severity === 'must');
+  return hasBlockingValidationIssues({ technical, architectural }) === true;
 }
 
 /**
@@ -34,11 +36,7 @@ function hasBlockingIssues(technical: TechnicalValidationResult, architectural: 
 export const repairStage: PipelineStageDef = {
   id: 'repair',
   label: 'Исправление ошибок валидации',
-  isDone: (outputs) => {
-    const { technical, architectural } = outputs.validationResult ?? {};
-    if (!technical || !architectural) return false;
-    return !hasBlockingIssues(technical, architectural);
-  },
+  isDone: (outputs) => hasBlockingValidationIssues(outputs.validationResult) === false,
   async run(state, { session, ports }) {
     const proposal = state.stageOutputs.proposal;
     const graph = state.stageOutputs.architectureGraph;

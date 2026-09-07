@@ -13,6 +13,8 @@ import { registerAISettingsRoutes } from './routes/ai-settings.js';
 import { registerSessionRoutes } from './routes/sessions.js';
 import { registerQuestionRoutes } from './routes/questions.js';
 import { registerProposalRoutes } from './routes/proposals.js';
+import { registerApplyRoutes } from './routes/apply.js';
+import { registerHistoryRoutes } from './routes/history.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -30,6 +32,8 @@ async function main(): Promise<void> {
   await registerSessionRoutes(app, container);
   await registerQuestionRoutes(app, container);
   await registerProposalRoutes(app, container);
+  await registerApplyRoutes(app, container);
+  await registerHistoryRoutes(app, container);
 
   // Продакшен (`npm start`): раздаём собранный web SPA из того же процесса
   // (ФТ28 — единый локальный процесс). В dev-режиме `npm run dev` поднимает

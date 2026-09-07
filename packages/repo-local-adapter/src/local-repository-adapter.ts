@@ -72,6 +72,10 @@ export class LocalRepositoryAdapter implements RepositoryAdapter {
     }
   }
 
+  async deleteFiles(paths: string[]): Promise<void> {
+    await Promise.all(paths.map((path) => rm(join(this.#rootDir, path), { force: true })));
+  }
+
   async getRevisionInfo(): Promise<{ branch?: string; commit?: string; capturedAt: string }> {
     const capturedAt = new Date().toISOString();
     try {

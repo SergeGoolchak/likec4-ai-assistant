@@ -14,10 +14,13 @@ import { likec4GenerationStage } from './stages/likec4-generation.js';
 import { validationStage } from './stages/validation.js';
 import { architectureReviewStage } from './stages/architecture-review.js';
 import { repairStage } from './stages/repair.js';
+import { diffStage } from './stages/diff.js';
+import { previewStage } from './stages/preview.js';
+import { applyStage } from './stages/apply.js';
 import { computePendingQuestionIds } from './pending-questions.js';
 import type { OrchestratorPorts, PipelineStageDef } from './stage.js';
 
-/** Стадии 1-16 плана. Стадия 17 (Diff, Milestone 10) присоединится следующей. */
+/** Все 19 стадий плана (Milestone 10 замыкает список). */
 export const STAGES: PipelineStageDef[] = [
   loadConfluenceStage,
   parseSpecificationStage,
@@ -34,6 +37,9 @@ export const STAGES: PipelineStageDef[] = [
   validationStage,
   architectureReviewStage,
   repairStage,
+  diffStage,
+  previewStage,
+  applyStage,
 ];
 
 export interface RunOptions {
@@ -115,6 +121,7 @@ function advance(session: SessionRecord, stage: PipelineStageDef, partialOutputs
     // месте, а не мутируются отдельно в каждом роуте, который меняет ambiguities/proposal.
     questions: stageOutputs.ambiguities ?? session.questions,
     proposalId: stageOutputs.proposal?.id ?? session.proposalId,
+    applyResult: stageOutputs.applyResult ?? session.applyResult,
     pipelineState: {
       ...session.pipelineState,
       currentStage: stage.id,

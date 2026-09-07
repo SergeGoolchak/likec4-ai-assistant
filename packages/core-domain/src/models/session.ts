@@ -65,6 +65,14 @@ export interface PipelineState {
     repairAttempts: RepairAttemptLog[];
     diff: FileDiff[];
     previewViews: RenderedView[];
+    /**
+     * Источник истины для гейта стадии 19 (Apply) — `PipelineStageDef.isDone`
+     * видит только `stageOutputs`, не всю сессию, поэтому одноимённое top-level
+     * поле `SessionRecord.applyResult` не годится напрямую (та же причина, по
+     * которой `validationResult` переехал сюда же в Milestone 9). Top-level
+     * поле остаётся зеркалом для истории/UI, синхронизируется в `advance()`.
+     */
+    applyResult: ApplyResult;
   }>;
   /** Непустой массив => UI обязан показать экран Questions, прежде чем pipeline сможет продолжиться. */
   pendingQuestionIds: string[];

@@ -105,3 +105,14 @@ test('renderViewsPreview returns real SVG for the requested view', async () => {
   assert.match(views[0]?.svg ?? '', /^<\?xml/);
   assert.match(views[0]?.svg ?? '', /<svg/);
 });
+
+test('renderViewsPreview also returns a plain-JSON layoutData for the official React renderer (Milestone 10)', async () => {
+  const validator = new LikeC4NpmValidator();
+  const views = await validator.renderViewsPreview(VALID_MODEL, ['index']);
+
+  assert.equal(views.length, 1);
+  assert.ok(views[0]?.layoutData);
+  // Должен переживать JSON.stringify/parse без потерь — так он и уйдёт на фронтенд по SSE/REST.
+  const roundtripped = JSON.parse(JSON.stringify(views[0]?.layoutData));
+  assert.deepEqual(roundtripped, views[0]?.layoutData);
+});

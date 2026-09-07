@@ -60,6 +60,14 @@ export interface AppContainer {
   createEmbeddingProvider(options: { apiKey?: string; baseUrl?: string }): EmbeddingProvider;
   createChangeEngine(llmProvider: LLMProvider): ChangeEngine;
   createProposalGenerator(llmProvider: LLMProvider): ProposalGenerator;
+  /**
+   * Project-level mutex (риск №6 — конкурентная запись файлов): сериализует
+   * Apply/Rollback на один и тот же проект, чтобы два одновременных запроса
+   * не устроили гонку записи в один и тот же локальный репозиторий. Сервер
+   * однопроцессный и локальный — in-process Map достаточно, ОС-уровневый
+   * файловый лок был бы избыточен (см. explain.md, Milestone 10).
+   */
+  withProjectLock<T>(projectId: string, fn: () => Promise<T>): Promise<T>;
 }
 
 export async function createAppContainer(config: AppConfig): Promise<AppContainer> {
@@ -69,6 +77,7 @@ export async function createAppContainer(config: AppConfig): Promise<AppContaine
   });
 
   const db = await openDatabase(config.dbFilePath);
+  const projectLocks = new Map<string, Promise<unknown>>();
 
   return {
     config,
@@ -91,5 +100,17 @@ export async function createAppContainer(config: AppConfig): Promise<AppContaine
     createEmbeddingProvider: (options) => new OpenAIEmbeddingProvider({ ...options, baseUrl: options.baseUrl ?? config.openaiBaseUrl }),
     createChangeEngine: (llmProvider) => new LLMChangeEngine({ llmProvider }),
     createProposalGenerator: (llmProvider) => new LLMProposalGenerator({ llmProvider }),
+    withProjectLock: (projectId, fn) => {
+      const previous = projectLocks.get(projectId) ?? Promise.resolve();
+      // Цепочка ждёт предыдущий вызов независимо от его исхода (иначе один упавший Apply
+      // навсегда "отравил" бы очередь для этого проекта), но сама возвращённая наружу
+      // promise сохраняет реальный успех/ошибку именно текущего вызова.
+      const run = previous.catch(() => undefined).then(fn);
+      projectLocks.set(
+        projectId,
+        run.catch(() => undefined),
+      );
+      return run;
+    },
   };
 }

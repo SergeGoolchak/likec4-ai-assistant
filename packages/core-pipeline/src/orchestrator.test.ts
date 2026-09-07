@@ -82,6 +82,9 @@ class FakeRepositoryAdapter implements RepositoryAdapter {
   async writeFiles(): Promise<void> {
     throw new Error('not supported in fake');
   }
+  async deleteFiles(): Promise<void> {
+    throw new Error('not supported in fake');
+  }
   async getRevisionInfo() {
     return { capturedAt: new Date().toISOString() };
   }
@@ -298,14 +301,64 @@ test('runs stages 1-11 straight through when nothing needs clarifying, then paus
 
     // Стадии 13-15 реально выполнились (likec4-generation, validation, architecture-review);
     // 16 (repair) — гейт-подобная стадия: isDone сразу true (нет блокирующих проблем), run() не вызывался.
-    assert.equal(result.pipelineState.status, 'completed');
+    // 17-18 (diff, preview) — тоже реально выполнились; 19 (apply) — гейт: ждёт явного действия
+    // пользователя (роут apply.ts), поэтому pipeline снова останавливается, а не завершается сам.
+    assert.equal(result.pipelineState.status, 'paused-for-user');
+    assert.equal(result.pipelineState.currentStage, 'apply');
     assert.ok(result.pipelineState.stageOutputs.generatedFiles && result.pipelineState.stageOutputs.generatedFiles.length > 0);
     assert.equal(result.pipelineState.stageOutputs.validationResult?.technical?.ok, true);
     assert.equal(result.pipelineState.stageOutputs.validationResult?.architectural?.ok, true);
     assert.equal(result.pipelineState.stageOutputs.repairAttempts, undefined, 'repair.run() must never be called when there is nothing to repair');
+    assert.ok(result.pipelineState.stageOutputs.diff, 'diff stage should have run automatically (not a gate)');
+    assert.ok(result.pipelineState.stageOutputs.previewViews, 'preview stage should have run automatically (not a gate)');
     // 9 выполненных стадий 1-9 (первый run) + 1 запись о постановке на паузу на user-review +
-    // 3 стадии 13-15, реально выполненные при возобновлении (14/15/16 гейт-стадия repair не в счёт).
-    assert.equal(result.userFacingTimeline.length, 13);
+    // 3 стадии 13-15 + 2 стадии 17-18, реально выполненные при возобновлении (16 repair и 19 apply —
+    // гейт-подобные стадии: 16 пропущена молча т.к. isDone сразу true, 19 добавляет запись о паузе).
+    assert.equal(result.userFacingTimeline.length, 16);
+
+    const persistedPausedAtApply = await sessionStore.get('s1');
+    assert.equal(persistedPausedAtApply?.pipelineState.status, 'paused-for-user');
+
+    // Simulate the apply route: it writes files itself (not through a stage `run()`, see apply.ts's
+    // doc comment) and then persists `stageOutputs.applyResult` directly, exactly like this.
+    const applied = {
+      ...result,
+      applyResult: {
+        appliedAt: new Date().toISOString(),
+        snapshotId: 'snap-1',
+        appliedItemIds: ['candidate-r1'],
+        rejectedItemIds: [],
+        filesChanged: ['model.c4'],
+        rollbackAvailable: true,
+      },
+      pipelineState: {
+        ...result.pipelineState,
+        stageOutputs: {
+          ...result.pipelineState.stageOutputs,
+          applyResult: {
+            appliedAt: new Date().toISOString(),
+            snapshotId: 'snap-1',
+            appliedItemIds: ['candidate-r1'],
+            rejectedItemIds: [],
+            filesChanged: ['model.c4'],
+            rollbackAvailable: true,
+          },
+        },
+      },
+    };
+    await sessionStore.update('s1', applied);
+
+    const finalOrchestrator = new PipelineOrchestrator();
+    const finished = await finalOrchestrator.run({
+      session: applied,
+      ports: { confluenceAdapter, repositoryAdapter, likec4Parser, llmProvider, changeEngine, proposalGenerator, likec4Validator, architecturalReviewer },
+      sessionStore,
+    });
+
+    // apply.isDone становится true и это последняя стадия — orchestrator просто закрывает статус,
+    // не добавляя новую запись в timeline (никакой advance() не вызывается для уже готового гейта).
+    assert.equal(finished.pipelineState.status, 'completed');
+    assert.equal(finished.userFacingTimeline.length, 16);
 
     const persisted = await sessionStore.get('s1');
     assert.equal(persisted?.pipelineState.status, 'completed');

@@ -2,14 +2,18 @@ import { randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type {
+  ApplyResult,
   ClarificationQuestion,
+  FileDiff,
   PipelineStageId,
   PipelineStatus,
   Proposal,
+  RenderedView,
   SessionRecord,
   UserFacingError,
   UserFacingEvent,
 } from '@likec4-ai/core-domain';
+import { hasBlockingValidationIssues } from '@likec4-ai/core-pipeline';
 import type { AppContainer } from '../composition-root.js';
 import { buildOrchestratorPorts, type FullOrchestratorPorts } from '../orchestrator-ports.js';
 
@@ -35,6 +39,8 @@ interface SessionSummary {
   repairAttemptCount?: number;
   /** undefined => валидация ещё не прошла оба уровня; false => есть техническая ошибка или must-находка, ждём repair. */
   hasBlockingValidationIssues?: boolean;
+  diffFileCount?: number;
+  previewViewCount?: number;
 }
 
 export interface SessionView {
@@ -49,6 +55,12 @@ export interface SessionView {
   questions: ClarificationQuestion[];
   /** Результат стадии 11 — есть, начиная с paused-for-user на user-review (стадия 12) и до конца. */
   proposal?: Proposal;
+  /** Результат стадии 17 (Diff, Milestone 10) — полный список файлов, не только счётчик, для экрана Diff. */
+  diff?: FileDiff[];
+  /** Результат стадии 18 (Preview, Milestone 10) — включает и `svg`, и `layoutData` для интерактивного рендера. */
+  previewViews?: RenderedView[];
+  /** Результат стадии 19 (Apply, Milestone 10) — есть только после того, как пользователь нажал Apply. */
+  applyResult?: ApplyResult;
 }
 
 export async function registerSessionRoutes(app: FastifyInstance, container: AppContainer): Promise<void> {
@@ -189,13 +201,15 @@ export function toSessionView(session: SessionRecord): SessionView {
       technicalDiagnosticsCount: outputs.validationResult?.technical?.diagnostics.length,
       architecturalFindingsCount: outputs.validationResult?.architectural?.findings.length,
       repairAttemptCount: outputs.repairAttempts?.length,
-      hasBlockingValidationIssues:
-        outputs.validationResult?.technical && outputs.validationResult.architectural
-          ? !outputs.validationResult.technical.ok || outputs.validationResult.architectural.findings.some((f) => f.severity === 'must')
-          : undefined,
+      hasBlockingValidationIssues: hasBlockingValidationIssues(outputs.validationResult),
+      diffFileCount: outputs.diff?.length,
+      previewViewCount: outputs.previewViews?.length,
     },
     questions: outputs.ambiguities ?? [],
     proposal: outputs.proposal,
+    diff: outputs.diff,
+    previewViews: outputs.previewViews,
+    applyResult: session.applyResult,
   };
 }
 

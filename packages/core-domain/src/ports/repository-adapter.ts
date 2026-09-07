@@ -12,5 +12,12 @@ export interface RepositoryAdapter {
   readFile(path: string): Promise<RepositoryFile>;
   readAll(): Promise<RepositoryFile[]>;
   writeFiles(files: RepositoryFile[]): Promise<void>;
+  /**
+   * Нужен Rollback (Milestone 10): восстановление снэпшота должно не только
+   * перезаписать файлы, которые были на момент снэпшота, но и убрать файлы,
+   * появившиеся после него (например новый файл, созданный Apply) — иначе
+   * это не настоящий откат к прежнему состоянию, а частичная перезапись.
+   */
+  deleteFiles(paths: string[]): Promise<void>;
   getRevisionInfo(): Promise<{ branch?: string; commit?: string; capturedAt: string }>;
 }

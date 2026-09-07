@@ -105,6 +105,10 @@ export class BitbucketServerAdapter implements RepositoryAdapter {
     throw new Error('BitbucketServerAdapter is read-only in MVP — writeFiles is not supported.');
   }
 
+  async deleteFiles(_paths: string[]): Promise<void> {
+    throw new Error('BitbucketServerAdapter is read-only in MVP — deleteFiles is not supported.');
+  }
+
   async getRevisionInfo(): Promise<{ branch?: string; commit?: string; capturedAt: string }> {
     const capturedAt = new Date().toISOString();
     const url = `${this.#repoUrl()}/commits?until=${encodeURIComponent(this.#atRef)}&limit=1`;

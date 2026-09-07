@@ -27,6 +27,9 @@ const STAGE_ORDER: { id: PipelineStageId; label: string; isDone: (s: SessionView
   { id: 'validation', label: 'Техническая валидация', isDone: (s) => s.summary.technicalDiagnosticsCount !== undefined },
   { id: 'architecture-review', label: 'Архитектурная проверка', isDone: (s) => s.summary.architecturalFindingsCount !== undefined },
   { id: 'repair', label: 'Исправление ошибок валидации', isDone: (s) => s.summary.hasBlockingValidationIssues === false },
+  { id: 'diff', label: 'Сравнение изменений', isDone: (s) => s.summary.diffFileCount !== undefined },
+  { id: 'preview', label: 'Рендер превью диаграмм', isDone: (s) => s.summary.previewViewCount !== undefined },
+  { id: 'apply', label: 'Применение изменений', isDone: (s) => s.applyResult !== undefined },
 ];
 
 export function AnalysisPage() {
@@ -128,6 +131,20 @@ export function AnalysisPage() {
         </Card>
       )}
 
+      {session.status === 'paused-for-user' && session.currentStage === 'apply' && (
+        <Card className="mt-6 bg-amber-50 ring-amber-200">
+          <p className="text-sm font-medium text-amber-700">
+            Изменения готовы к применению — {session.summary.diffFileCount ?? 0} {fileWord(session.summary.diffFileCount ?? 0)}.
+          </p>
+          <Link
+            to={`/sessions/${session.id}/diff`}
+            className="mt-2 inline-block rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            Перейти к Diff
+          </Link>
+        </Card>
+      )}
+
       {session.status === 'failed' && session.error && (
         <div className="mt-6">
           <ErrorState error={session.error} />
@@ -168,10 +185,37 @@ export function AnalysisPage() {
               В существующей модели найдено диагностик: {session.summary.existingModelDiagnosticsCount}
             </p>
           )}
+          {session.applyResult && (
+            <p className="mt-4 border-t border-slate-100 pt-4 text-sm font-medium text-emerald-700">
+              Применено — изменено файлов: {session.applyResult.filesChanged.length}.
+            </p>
+          )}
+          <div className="mt-4 flex flex-wrap gap-4 border-t border-slate-100 pt-4 text-sm">
+            <Link to={`/sessions/${session.id}/diff`} className="text-slate-500 hover:text-slate-700">
+              Diff →
+            </Link>
+            <Link to={`/sessions/${session.id}/preview`} className="text-slate-500 hover:text-slate-700">
+              Preview →
+            </Link>
+            <Link to={`/sessions/${session.id}/apply`} className="text-slate-500 hover:text-slate-700">
+              Apply →
+            </Link>
+            <Link to={`/projects/${session.projectId}/history`} className="text-slate-500 hover:text-slate-700">
+              History →
+            </Link>
+          </div>
         </Card>
       )}
     </div>
   );
+}
+
+function fileWord(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'файл';
+  if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return 'файла';
+  return 'файлов';
 }
 
 function questionWord(count: number): string {

@@ -75,6 +75,11 @@ test('writeFiles is not supported and rejects clearly', async () => {
   await assert.rejects(() => client.writeFiles([]), /read-only/i);
 });
 
+test('deleteFiles is not supported and rejects clearly', async () => {
+  const client = adapter();
+  await assert.rejects(() => client.deleteFiles([]), /read-only/i);
+});
+
 test('getRevisionInfo returns the branch name and latest commit id', async () => {
   const client = adapter({}, (url) => {
     if (url.includes('/commits')) {

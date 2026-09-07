@@ -20,8 +20,17 @@ export class LikeC4NpmValidator implements LikeC4Validator {
       // that Preview would require Playwright, based on the CLI's own
       // dependency list rather than the programmatic API actually used here).
       const rendered = await instance.viewsService.viewsAsGraphvizOut();
+      // `diagrams()` — тот же layout, что и viewsAsGraphvizOut(), но как чистый
+      // JSON-объект `LayoutedView` вместо SVG-строки: именно этого формата
+      // требует официальный React-компонент `likec4/react` (`LikeC4Diagram`)
+      // для интерактивного превью с click-to-details (Milestone 10, спайк
+      // подтвердил — см. explain.md). SVG остаётся как второе, дешёво
+      // посчитанное поле — статичный fallback, не отдельный путь исполнения.
+      const layouted = await instance.diagrams();
+      const layoutByViewId = new Map(layouted.map((view) => [view.id, view]));
+
       const filtered = viewIds ? rendered.filter((view) => viewIds.includes(view.id)) : rendered;
-      return filtered.map((view) => ({ viewId: view.id, svg: view.svg }));
+      return filtered.map((view) => ({ viewId: view.id, svg: view.svg, layoutData: layoutByViewId.get(view.id) }));
     });
   }
 }
