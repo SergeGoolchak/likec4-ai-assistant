@@ -102,4 +102,6 @@ export interface Proposal {
   createdAt: string;
   items: ProposalItem[];
   status: ProposalStatus;
+  /** Explicit user confirmation of the complete set of decisions. */
+  reviewConfirmedAt?: string;
 }

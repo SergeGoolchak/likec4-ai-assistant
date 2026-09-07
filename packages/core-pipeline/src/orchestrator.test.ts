@@ -284,7 +284,7 @@ test('runs stages 1-11 straight through when nothing needs clarifying, then paus
         ...paused.pipelineState,
         stageOutputs: {
           ...paused.pipelineState.stageOutputs,
-          proposal: { ...paused.pipelineState.stageOutputs.proposal!, items: [{ ...item, decision: 'approved' as const }] },
+          proposal: { ...paused.pipelineState.stageOutputs.proposal!, reviewConfirmedAt: new Date().toISOString(), items: [{ ...item, decision: 'approved' as const }] },
         },
       },
     };
@@ -481,6 +481,7 @@ test('a failed stage persists a failed status with a UserFacingError, and progre
 
     const persisted = await sessionStore.get('s1');
     assert.equal(persisted?.pipelineState.status, 'failed');
+    assert.equal(persisted?.pipelineState.currentStage, 'load-likec4', 'failure must identify the failing stage, not the previous successful stage');
     assert.ok(persisted?.pipelineState.error);
     assert.match(persisted?.pipelineState.error?.likelyCause ?? '', /ECONNREFUSED/);
     // Stages before the failure are still there.
@@ -523,5 +524,24 @@ test('re-running a failed session retries only the failed stage and can succeed'
     assert.equal(result.pipelineState.currentStage, 'user-review');
     assert.equal(confluenceAdapter.calls, 1, 'load-confluence should not be re-run on retry');
     assert.equal(repositoryAdapter.calls, 2, 'load-likec4 is retried once');
+  });
+});
+
+
+test('active stage is persisted before an adapter is called, clearing stale errors on resume', async () => {
+  await withStore(async (sessionStore) => {
+    const record = fixtureSession();
+    record.pipelineState.status = 'failed';
+    record.pipelineState.error = { id: 'old', title: 'Old error', likelyCause: 'Old cause', suggestedAction: 'Retry', retryable: true };
+    await sessionStore.create(record);
+    const adapter = new FakeConfluenceAdapter();
+    adapter.fetchPage = async () => {
+      const active = await sessionStore.get(record.id);
+      assert.equal(active?.pipelineState.status, 'running');
+      assert.equal(active?.pipelineState.currentStage, 'load-confluence');
+      assert.equal(active?.pipelineState.error, undefined);
+      throw new Error('simulated failure after inspection');
+    };
+    await assert.rejects(() => new PipelineOrchestrator().run({ session: record, sessionStore, ports: { confluenceAdapter: adapter, repositoryAdapter: new FakeRepositoryAdapter(), likec4Parser: new FakeLikeC4Parser() } }), /simulated failure/);
   });
 });

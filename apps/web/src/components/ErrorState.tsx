@@ -11,7 +11,7 @@ export function ErrorState({ error, onRetry }: { error: UserFacingError; onRetry
   const helpTopic = error.helpTopicId ? getHelpTopic(error.helpTopicId) : undefined;
 
   return (
-    <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+    <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4">
       <p className="font-medium text-rose-900">{error.title}</p>
       <p className="mt-1 text-sm text-rose-700">{error.likelyCause}</p>
       <p className="mt-1 text-sm text-rose-700">{error.suggestedAction}</p>

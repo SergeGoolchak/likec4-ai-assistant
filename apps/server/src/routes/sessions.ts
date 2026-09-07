@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type {
@@ -12,8 +12,9 @@ import type {
   SessionRecord,
   UserFacingError,
   UserFacingEvent,
+  PipelineState,
 } from '@likec4-ai/core-domain';
-import { hasBlockingValidationIssues } from '@likec4-ai/core-pipeline';
+import { hasBlockingValidationIssues, STAGES } from '@likec4-ai/core-pipeline';
 import type { AppContainer } from '../composition-root.js';
 import { buildOrchestratorPorts, type FullOrchestratorPorts } from '../orchestrator-ports.js';
 
@@ -37,7 +38,7 @@ interface SessionSummary {
   technicalDiagnosticsCount?: number;
   architecturalFindingsCount?: number;
   repairAttemptCount?: number;
-  /** undefined => валидация ещё не прошла оба уровня; false => есть техническая ошибка или must-находка, ждём repair. */
+  /** undefined — проверка не завершена; true — есть блокирующие проблемы. */
   hasBlockingValidationIssues?: boolean;
   diffFileCount?: number;
   previewViewCount?: number;
@@ -51,6 +52,9 @@ export interface SessionView {
   timeline: UserFacingEvent[];
   error?: UserFacingError;
   summary: SessionSummary;
+  completedStageIds: PipelineStageId[];
+  reviewRevision?: string;
+  validation?: NonNullable<PipelineState['stageOutputs']['validationResult']>;
   /** Открытые и уже отвеченные вопросы стадии 9 — непустой список открытых означает, что pipeline стоит на паузе (см. PipelineStatus.paused-for-user). */
   questions: ClarificationQuestion[];
   /** Результат стадии 11 — есть, начиная с paused-for-user на user-review (стадия 12) и до конца. */
@@ -134,6 +138,7 @@ export async function registerSessionRoutes(app: FastifyInstance, container: App
     if (
       initial.pipelineState.status === 'completed' ||
       initial.pipelineState.status === 'failed' ||
+      initial.pipelineState.status === 'aborted' ||
       initial.pipelineState.status === 'paused-for-user'
     ) {
       reply.raw.end();
@@ -153,7 +158,7 @@ export async function registerSessionRoutes(app: FastifyInstance, container: App
         .finally(() => reply.raw.end());
     });
 
-    request.raw.on('close', unsubscribe);
+    reply.raw.on('close', unsubscribe);
   });
 }
 
@@ -178,6 +183,7 @@ export function runSessionInBackground(container: AppContainer, session: Session
 
 export function toSessionView(session: SessionRecord): SessionView {
   const outputs = session.pipelineState.stageOutputs;
+  const currentIndex = STAGES.findIndex((stage) => stage.id === session.pipelineState.currentStage);
   return {
     id: session.id,
     projectId: session.projectId,
@@ -185,6 +191,11 @@ export function toSessionView(session: SessionRecord): SessionView {
     currentStage: session.pipelineState.currentStage,
     timeline: session.userFacingTimeline,
     error: session.pipelineState.error,
+    completedStageIds: STAGES.filter((stage, index) =>
+      (index <= currentIndex || session.pipelineState.status === 'completed') && stage.isDone(outputs),
+    ).map((stage) => stage.id),
+    validation: outputs.validationResult,
+    reviewRevision: outputs.proposal ? createHash('sha256').update(JSON.stringify(outputs.proposal)).digest('hex') : undefined,
     summary: {
       confluenceTitle: outputs.confluenceContent?.title,
       specificationChunkCount: outputs.specification?.chunks.length,

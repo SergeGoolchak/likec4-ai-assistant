@@ -107,7 +107,7 @@ export function ArchitectureRulesPage() {
 
       <div className="mt-2 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-slate-900">
-          Architecture Rules
+          Правила архитектуры
           <HelpAnchor topicId="screen.architecture-rules" />
         </h1>
         {editingRuleId === null && (

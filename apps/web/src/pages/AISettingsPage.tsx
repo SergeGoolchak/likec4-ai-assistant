@@ -1,3 +1,4 @@
+import { QueryState } from '../components/QueryState';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -11,7 +12,7 @@ const DEFAULT_MODEL = 'gpt-4o-mini';
 export function AISettingsPage() {
   const { id: projectId } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['ai-settings', projectId],
     queryFn: () => getAISettings(projectId!),
     enabled: Boolean(projectId),
@@ -26,8 +27,8 @@ export function AISettingsPage() {
   }, [data?.model]);
 
   useEffect(() => {
-    if (data?.baseUrl) setBaseUrl(data.baseUrl);
-  }, [data?.baseUrl]);
+    if (data) setBaseUrl(data.baseUrl ?? '');
+  }, [data]);
 
   const mutation = useMutation({
     mutationFn: () => saveAISettings(projectId!, { model, apiKey: apiKey || undefined, baseUrl: baseUrl || undefined }),
@@ -36,6 +37,8 @@ export function AISettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['ai-settings', projectId] });
     },
   });
+
+  if (error || isLoading) return <QueryState error={error} onRetry={() => refetch()} label="Загружаем настройки…" />;
 
   return (
     <div className="max-w-lg">

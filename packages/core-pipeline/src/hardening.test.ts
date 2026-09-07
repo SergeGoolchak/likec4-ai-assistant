@@ -288,7 +288,13 @@ async function assertStageFailsWithoutTouchingRepo(fakes: Fakes, expectedFailedS
     await sessionStore.create(session);
 
     const orchestrator = new PipelineOrchestrator();
-    await assert.rejects(() => orchestrator.run({ session, ports: fakes, sessionStore }));
+    await assert.rejects(async () => {
+      const result = await orchestrator.run({ session, ports: fakes, sessionStore });
+      if (result.pipelineState.currentStage === 'user-review') {
+        result.pipelineState.stageOutputs.proposal!.reviewConfirmedAt = new Date().toISOString();
+        await orchestrator.run({ session: result, ports: fakes, sessionStore });
+      }
+    });
 
     const persisted = await sessionStore.get('s1');
     assert.equal(persisted?.pipelineState.status, 'failed');
@@ -344,11 +350,7 @@ test('proposal-generation: an LLM failure fails cleanly without touching the rep
   await assertStageFailsWithoutTouchingRepo(fakes, 'proposal-generation');
 });
 
-// Стадии 13+ (Validation, Architecture Review, Repair, Preview) требуют пройденного гейта
-// user-review — `FakeProposalGenerator.generate()` в этом файле намеренно возвращает решение
-// 'approved' сразу (а не 'pending', как в orchestrator.test.ts), поэтому один и тот же
-// `orchestrator.run()` проходит через ВСЕ стадии 1-18 за один вызов без ручного вмешательства,
-// и `assertStageFailsWithoutTouchingRepo` годится и для них без отдельного helper'а.
+// Для стадий после user-review helper подтверждает готовые решения и возобновляет pipeline.
 
 test('validation: a local likec4 validator crash fails cleanly without touching the repository', async () => {
   const fakes = freshFakes();

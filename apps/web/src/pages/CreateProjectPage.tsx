@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { ApiError, createProject } from '../api/client';
 import { Card } from '../components/Card';
@@ -18,11 +18,14 @@ export function CreateProjectPage() {
   });
 
   return (
-    <div className="max-w-lg">
-      <h1 className="text-2xl font-semibold text-slate-900">
+    <div className="max-w-2xl">
+      <Link to="/" className="text-link">← К проектам</Link>
+      <p className="eyebrow mt-6 mb-3">Первый шаг</p>
+      <h1 className="page-title">
         Новый проект
         <HelpAnchor topicId="screen.create-project" />
       </h1>
+      <p className="page-description">Подключите существующую модель. Затем настроим источник спецификаций и AI-провайдера.</p>
       <Card className="mt-6">
         <form
           className="space-y-4"

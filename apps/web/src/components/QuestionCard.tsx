@@ -57,6 +57,7 @@ export function QuestionCard({
 
       {question.allowFreeText && (
         <textarea
+          aria-label="Свой вариант ответа"
           className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
           rows={2}
           placeholder="Свой вариант ответа (необязательно)"

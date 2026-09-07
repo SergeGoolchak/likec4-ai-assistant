@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { ProposalItem } from '../api/types';
+import { ErrorState } from './ErrorState';
+import type { ProposalItem, UserFacingError } from '../api/types';
 import { Card } from './Card';
 
 export interface DecisionInput {
@@ -8,7 +9,7 @@ export interface DecisionInput {
   proposedLikeC4Code?: string;
 }
 
-const TYPE_LABELS: Record<string, string> = {
+export const TYPE_LABELS: Record<string, string> = {
   'new-element': 'Новый элемент',
   'modified-element': 'Изменение элемента',
   'new-relationship': 'Новая связь',
@@ -22,7 +23,7 @@ const TYPE_LABELS: Record<string, string> = {
   'no-change': 'Без изменений',
 };
 
-const DECISION_LABELS: Record<string, { label: string; className: string }> = {
+export const DECISION_LABELS: Record<string, { label: string; className: string }> = {
   pending: { label: 'Ожидает решения', className: 'bg-slate-100 text-slate-600' },
   approved: { label: 'Принято', className: 'bg-emerald-100 text-emerald-700' },
   rejected: { label: 'Отклонено', className: 'bg-rose-100 text-rose-700' },
@@ -40,13 +41,20 @@ export function ProposalItemCard({
   onDecide,
   onRegenerate,
   isSubmitting,
+  readOnly = false,
+  error,
+  onEditingChange,
 }: {
   item: ProposalItem;
-  onDecide: (input: DecisionInput) => void;
+  onDecide: (input: DecisionInput) => Promise<boolean>;
   onRegenerate: () => void;
   isSubmitting: boolean;
+  readOnly?: boolean;
+  error?: UserFacingError;
+  onEditingChange?: (editing: boolean) => void;
 }) {
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setEditingState] = useState(false);
+  const setIsEditing = (editing: boolean) => { setEditingState(editing); onEditingChange?.(editing); };
   const [editedCode, setEditedCode] = useState(item.proposedLikeC4Code ?? '');
   const [decisionNote, setDecisionNote] = useState('');
 
@@ -98,7 +106,7 @@ export function ProposalItemCard({
         <ul className="mt-1 space-y-1 text-xs text-slate-500">
           {item.sources.map((s, i) => (
             <li key={i}>
-              {s.label}
+              {s.url && /^https?:\/\//i.test(s.url) ? <a className="text-link" href={s.url} target="_blank" rel="noreferrer">{s.label} ↗</a> : s.label}
               {s.excerpt && <span className="text-slate-400"> — {s.excerpt}</span>}
             </li>
           ))}
@@ -109,6 +117,7 @@ export function ProposalItemCard({
         <p className="text-xs font-medium text-slate-400">Черновик LikeC4 (не финален)</p>
         {isEditing ? (
           <textarea
+            aria-label="Код предложения"
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs focus:border-slate-500 focus:outline-none"
             rows={4}
             value={editedCode}
@@ -121,6 +130,7 @@ export function ProposalItemCard({
 
       {isEditing && (
         <input
+          aria-label="Комментарий к правке"
           className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
           placeholder="Комментарий к правке (необязательно)"
           value={decisionNote}
@@ -128,15 +138,16 @@ export function ProposalItemCard({
         />
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      {error && <div className="mt-4"><ErrorState error={error} /></div>}
+      {readOnly ? <p className="mt-4 text-sm text-slate-500">Проверка предложений завершена. Решения доступны для просмотра.</p> : <div className="mt-4 flex flex-wrap gap-2">
         {isEditing ? (
           <>
             <button
               type="button"
               disabled={isSubmitting || !editedCode.trim()}
-              onClick={() => {
-                onDecide({ decision: 'edited', decisionNote: decisionNote.trim() || undefined, proposedLikeC4Code: editedCode });
-                setIsEditing(false);
+              onClick={async () => {
+                const saved = await onDecide({ decision: 'edited', decisionNote: decisionNote.trim() || undefined, proposedLikeC4Code: editedCode });
+                if (saved) setIsEditing(false);
               }}
               className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
             >
@@ -144,6 +155,7 @@ export function ProposalItemCard({
             </button>
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={() => setIsEditing(false)}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
             >
@@ -164,14 +176,14 @@ export function ProposalItemCard({
               type="button"
               disabled={isSubmitting}
               onClick={() => onDecide({ decision: 'rejected' })}
-              className="rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+              className="btn-secondary"
             >
               Отклонить
             </button>
             <button
               type="button"
               disabled={isSubmitting}
-              onClick={() => setIsEditing(true)}
+              onClick={() => { setEditedCode(item.proposedLikeC4Code ?? ''); setDecisionNote(item.decisionNote ?? ''); setIsEditing(true); }}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
             >
               Изменить
@@ -186,7 +198,7 @@ export function ProposalItemCard({
             </button>
           </>
         )}
-      </div>
+      </div>}
     </Card>
   );
 }

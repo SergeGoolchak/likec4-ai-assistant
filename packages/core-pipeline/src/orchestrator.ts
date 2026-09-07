@@ -76,6 +76,13 @@ export class PipelineOrchestrator {
       }
 
       const startedAt = Date.now();
+      // Persist the active stage before work begins, including resumed runs.
+      // GET/SSE reconnects and failure reports must name the stage actually executing.
+      session = {
+        ...session,
+        pipelineState: { ...session.pipelineState, currentStage: stage.id, status: 'running', error: undefined },
+      };
+      await options.sessionStore.update(session.id, session);
       options.onStatus?.({ stage: stage.id, label: stage.label, at: new Date().toISOString() });
 
       try {

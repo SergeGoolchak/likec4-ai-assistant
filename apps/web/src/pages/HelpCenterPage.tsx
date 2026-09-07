@@ -34,7 +34,7 @@ export function HelpCenterPage() {
   return (
     <div className="max-w-3xl">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-900">Help Center</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Помощь и руководство</h1>
         <button
           type="button"
           onClick={restart}

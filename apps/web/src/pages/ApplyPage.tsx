@@ -1,3 +1,5 @@
+import { ValidationPanel } from '../components/ValidationPanel';
+import { QueryState } from '../components/QueryState';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { applySession, getSession, rollbackSession } from '../api/client';
@@ -10,7 +12,7 @@ export function ApplyPage() {
   const { id: sessionId } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
 
-  const { data: session, isLoading } = useQuery({
+  const { data: session, isLoading, error, refetch } = useQuery({
     queryKey: ['session', sessionId],
     queryFn: () => getSession(sessionId!),
     enabled: Boolean(sessionId),
@@ -26,6 +28,8 @@ export function ApplyPage() {
     onSuccess: (updated) => queryClient.setQueryData(['session', sessionId], updated),
   });
 
+  if (error && !session) return <QueryState error={error} onRetry={() => refetch()} />;
+
   if (isLoading || !session) {
     return <p className="text-sm text-slate-500">Загружаем сводку применения…</p>;
   }
@@ -38,6 +42,7 @@ export function ApplyPage() {
   // undefined (валидация ещё не считалась) тоже блокирует — Apply доступен только на явном false.
   const blocked = session.summary.hasBlockingValidationIssues !== false;
   const applied = session.applyResult !== undefined;
+  const readyToApply = session.status === 'paused-for-user' && session.currentStage === 'apply';
 
   return (
     <div className="max-w-2xl">
@@ -50,6 +55,7 @@ export function ApplyPage() {
         <HelpAnchor topicId="screen.apply" />
       </h1>
 
+      <div className="mt-6"><ValidationPanel session={session} /></div>
       <Card className="mt-6">
         <div className="grid grid-cols-3 gap-4">
           <Stat label="Файлов изменится" value={diff.length} />
@@ -59,18 +65,19 @@ export function ApplyPage() {
 
         {blocked && !applied && (
           <p className="mt-4 text-sm font-medium text-amber-700">
-            Apply заблокирован: есть непройденная техническая или архитектурная валидация. Вернитесь к анализу, чтобы увидеть диагностики.
+            Применение недоступно. Результаты проверок и причины блокировки показаны выше.
             <HelpAnchor topicId="field.apply-gate" />
           </p>
         )}
 
+        {!readyToApply && !applied && <p className="mt-4 text-sm text-slate-500">Задача ещё не готова к применению. Откройте анализ, чтобы увидеть текущее действие.</p>}
         {!applied ? (
           <button
             onClick={() => applyMutation.mutate()}
-            disabled={blocked || applyMutation.isPending}
+            disabled={blocked || !readyToApply || applyMutation.isPending}
             className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            {applyMutation.isPending ? 'Применяем…' : 'Apply'}
+            {applyMutation.isPending ? 'Применяем…' : 'Применить изменения'}
           </button>
         ) : (
           <div className="mt-4 space-y-3">

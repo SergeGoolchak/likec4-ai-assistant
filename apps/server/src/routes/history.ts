@@ -10,7 +10,8 @@ interface HistoryResponse {
 }
 
 export async function registerHistoryRoutes(app: FastifyInstance, container: AppContainer): Promise<void> {
-  app.get<{ Params: { projectId: string } }>('/api/projects/:projectId/history', async (request): Promise<HistoryResponse> => {
+  app.get<{ Params: { projectId: string } }>('/api/projects/:projectId/history', async (request, reply): Promise<HistoryResponse | { error: UserFacingError }> => {
+    if (!(await container.projectStore.get(request.params.projectId))) return sendError(reply, 404, projectNotFoundError(request.params.projectId));
     const [sessions, snapshots] = await Promise.all([
       container.sessionHistoryStore.list({ projectId: request.params.projectId }),
       container.snapshotStore.list(request.params.projectId),

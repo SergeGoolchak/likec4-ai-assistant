@@ -41,6 +41,13 @@ async function main(): Promise<void> {
   const webDist = join(__dirname, '../../web/dist');
   if (existsSync(webDist)) {
     await app.register(fastifyStatic, { root: webDist });
+    app.setNotFoundHandler((request, reply) => {
+      // Preserve SPA deep links on refresh, without masking unknown API endpoints/assets.
+      if (request.method === 'GET' && !request.url.startsWith('/api/') && request.headers.accept?.includes('text/html')) {
+        return reply.sendFile('index.html');
+      }
+      return reply.code(404).send({ error: { id: 'route.not-found', title: 'Адрес не найден', likelyCause: 'Такого адреса нет в приложении.', suggestedAction: 'Вернитесь к проектам.', retryable: false } });
+    });
   }
 
   await app.listen({ port: config.port, host: '127.0.0.1' });

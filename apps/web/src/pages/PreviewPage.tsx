@@ -1,3 +1,4 @@
+import { QueryState } from '../components/QueryState';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -12,15 +13,24 @@ export function PreviewPage() {
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [zoomIndex, setZoomIndex] = useState(2);
 
-  const { data: session, isLoading } = useQuery({
+  const { data: session, isLoading, error, refetch } = useQuery({
     queryKey: ['session', sessionId],
     queryFn: () => getSession(sessionId!),
     enabled: Boolean(sessionId),
   });
 
+  if (error && !session) return <QueryState error={error} onRetry={() => refetch()} />;
+
   if (isLoading || !session) {
     return <p className="text-sm text-slate-500">Загружаем превью диаграмм…</p>;
   }
+
+  if (session.previewViews === undefined) return (
+    <Card><h1 className="text-lg font-semibold">Диаграммы ещё не подготовлены.</h1>
+      <p className="mt-2 text-sm text-slate-500">Откройте анализ, чтобы увидеть текущее состояние и следующий шаг.</p>
+      <Link to={`/sessions/${sessionId}`} className="btn-secondary mt-4">К анализу</Link>
+    </Card>
+  );
 
   const views = session.previewViews ?? [];
   const activeView = views.find((v) => v.viewId === activeViewId) ?? views[0];
@@ -99,7 +109,7 @@ export function PreviewPage() {
         to={`/sessions/${sessionId}/apply`}
         className="mt-6 inline-block rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
       >
-        Дальше: Apply
+        Дальше: применение
       </Link>
     </div>
   );

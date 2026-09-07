@@ -76,6 +76,12 @@ export interface SessionView {
   timeline: import('@likec4-ai/core-domain').UserFacingEvent[];
   error?: import('@likec4-ai/core-domain').UserFacingError;
   summary: SessionSummary;
+  completedStageIds: import('@likec4-ai/core-domain').PipelineStageId[];
+  reviewRevision?: string;
+  validation?: {
+    technical?: import('@likec4-ai/core-domain').TechnicalValidationResult;
+    architectural?: import('@likec4-ai/core-domain').ArchitecturalValidationResult;
+  };
   questions: import('@likec4-ai/core-domain').ClarificationQuestion[];
   proposal?: import('@likec4-ai/core-domain').Proposal;
   diff?: import('@likec4-ai/core-domain').FileDiff[];

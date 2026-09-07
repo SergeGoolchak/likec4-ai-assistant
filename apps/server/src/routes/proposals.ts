@@ -1,112 +1,122 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import type { ItemDecisionStatus, ProposalItem, UserFacingError } from '@likec4-ai/core-domain';
+import type { ProposalItem, SessionRecord, UserFacingError } from '@likec4-ai/core-domain';
 import type { AppContainer } from '../composition-root.js';
 import { buildOrchestratorPorts } from '../orchestrator-ports.js';
 import { runSessionInBackground, toSessionView, type SessionView } from './sessions.js';
 
+type Result = SessionView | { error: UserFacingError };
 interface DecisionBody {
   decision?: 'approved' | 'rejected' | 'edited';
   decisionNote?: string;
-  /** Только для decision: 'edited' — ручная правка черновика кода без повторного обращения к LLM. */
   proposedLikeC4Code?: string;
 }
+const FINAL_DECISIONS = new Set(['approved', 'rejected', 'edited']);
 
-const FINAL_DECISIONS: ReadonlySet<string> = new Set<ItemDecisionStatus>(['approved', 'rejected', 'edited']);
+function editable(session: SessionRecord): boolean {
+  return session.pipelineState.status === 'paused-for-user'
+    && session.pipelineState.currentStage === 'user-review'
+    && !session.pipelineState.stageOutputs.proposal?.reviewConfirmedAt
+    && session.pipelineState.stageOutputs.generatedFiles === undefined;
+}
+
+function reviewError(title: string, cause: string): UserFacingError {
+  return { id: 'proposals.review-conflict', title, likelyCause: cause,
+    suggestedAction: 'Обновите задачу и проверьте актуальные решения.', retryable: true };
+}
 
 export async function registerProposalRoutes(app: FastifyInstance, container: AppContainer): Promise<void> {
+  // Serialize decisions, regeneration and confirmation across tabs. A running LLM
+  // request keeps the review locked, so its result cannot overwrite a confirmed set.
+  const busy = new Set<string>();
+  async function locked(id: string, reply: FastifyReply, action: () => Promise<Result>): Promise<Result> {
+    if (busy.has(id)) return sendError(reply, 409, reviewError('Изменения ещё сохраняются', 'В этой задаче уже выполняется другое действие.'));
+    busy.add(id);
+    try { return await action(); } finally { busy.delete(id); }
+  }
+
   app.post<{ Params: { sessionId: string; itemId: string }; Body: DecisionBody }>(
     '/api/sessions/:sessionId/proposal/items/:itemId/decision',
-    async (request, reply): Promise<SessionView | { error: UserFacingError }> => {
+    async (request, reply) => locked(request.params.sessionId, reply, async () => {
       const session = await container.sessionHistoryStore.get(request.params.sessionId);
       if (!session) return sendError(reply, 404, sessionNotFoundError(request.params.sessionId));
-
+      if (!editable(session)) return sendError(reply, 409, reviewError('Проверка уже завершена', 'Решения зафиксированы или задача находится на другом этапе.'));
       const proposal = session.pipelineState.stageOutputs.proposal;
       const item = proposal?.items.find((i) => i.id === request.params.itemId);
       if (!proposal || !item) return sendError(reply, 404, itemNotFoundError(request.params.itemId));
-
       const decision = request.body?.decision;
       if (!decision || !FINAL_DECISIONS.has(decision)) return sendError(reply, 400, invalidDecisionError());
-      if (decision === 'edited' && !request.body?.proposedLikeC4Code?.trim()) {
-        return sendError(reply, 400, missingEditedCodeError());
-      }
-
+      if (decision === 'edited' && !request.body?.proposedLikeC4Code?.trim()) return sendError(reply, 400, missingEditedCodeError());
       const updatedItem: ProposalItem = {
-        ...item,
-        decision,
-        decisionNote: request.body?.decisionNote?.trim() || undefined,
-        proposedLikeC4Code: decision === 'edited' ? request.body!.proposedLikeC4Code!.trim() : item.proposedLikeC4Code,
+        ...item, decision, decisionNote: request.body?.decisionNote?.trim() || undefined,
+        proposedLikeC4Code: decision === 'edited' ? request.body.proposedLikeC4Code!.trim() : item.proposedLikeC4Code,
       };
-      const updatedItems = proposal.items.map((i) => (i.id === updatedItem.id ? updatedItem : i));
-      const allDecided = updatedItems.every((i) => FINAL_DECISIONS.has(i.decision));
-
-      const updatedSession = {
-        ...session,
-        pipelineState: {
-          ...session.pipelineState,
-          stageOutputs: { ...session.pipelineState.stageOutputs, proposal: { ...proposal, items: updatedItems } },
-        },
-      };
-      await container.sessionHistoryStore.update(session.id, updatedSession);
-
-      if (allDecided) {
-        const project = await container.projectStore.get(session.projectId);
-        // Как и в questions.ts: если настройки проекта с момента запуска сессии сломались, решение
-        // всё равно сохранено — сессия останется в paused-for-user, а не потеряет уже принятое решение.
-        if (project) {
-          const built = await buildOrchestratorPorts(container, project);
-          if (built.ok) runSessionInBackground(container, updatedSession, built.ports);
-        }
-      }
-
-      return toSessionView(await container.sessionHistoryStore.get(session.id).then((s) => s ?? updatedSession));
-    },
+      const updated = { ...session, pipelineState: { ...session.pipelineState,
+        stageOutputs: { ...session.pipelineState.stageOutputs, proposal: {
+          ...proposal, items: proposal.items.map((i) => i.id === item.id ? updatedItem : i),
+        } },
+      } };
+      await container.sessionHistoryStore.update(session.id, updated);
+      return toSessionView(updated);
+    }),
   );
 
-  app.post<{ Params: { sessionId: string; itemId: string } }>(
-    '/api/sessions/:sessionId/proposal/items/:itemId/regenerate',
-    async (request, reply): Promise<SessionView | { error: UserFacingError }> => {
+  app.post<{ Params: { sessionId: string }; Body: { reviewRevision?: string } }>(
+    '/api/sessions/:sessionId/proposal/confirm',
+    async (request, reply) => locked(request.params.sessionId, reply, async () => {
       const session = await container.sessionHistoryStore.get(request.params.sessionId);
       if (!session) return sendError(reply, 404, sessionNotFoundError(request.params.sessionId));
-
-      const { stageOutputs } = session.pipelineState;
-      const proposal = stageOutputs.proposal;
-      const item = proposal?.items.find((i) => i.id === request.params.itemId);
-      // Регенерация ищет исходного кандидата по тому же id — при "merge" двух кандидатов в один item
-      // (см. LLMProposalGenerator) точечная регенерация неизбежно откатывает его обратно к одиночному
-      // кандидату-"первому в группе": честная и осознанная граница простоты, а не забытый случай.
-      const candidate = stageOutputs.changeCandidates?.find((c) => c.id === request.params.itemId);
-      if (!proposal || !item || !candidate || !stageOutputs.architectureGraph) {
-        return sendError(reply, 404, itemNotFoundError(request.params.itemId));
+      if (!editable(session)) return sendError(reply, 409, reviewError('Проверка уже завершена', 'Повторное подтверждение не запускает задачу заново.'));
+      const proposal = session.pipelineState.stageOutputs.proposal;
+      if (!proposal || !proposal.items.every((item) => FINAL_DECISIONS.has(item.decision))) {
+        return sendError(reply, 409, reviewError('Остались нерассмотренные предложения', 'Примите решение по каждому пункту перед продолжением.'));
       }
-
+      if (request.body?.reviewRevision !== toSessionView(session).reviewRevision) {
+        return sendError(reply, 409, reviewError('Решения изменились', 'В другой вкладке изменены предложения. Проверьте новую версию перед подтверждением.'));
+      }
       const project = await container.projectStore.get(session.projectId);
       if (!project) return sendError(reply, 404, sessionNotFoundError(request.params.sessionId));
       const built = await buildOrchestratorPorts(container, project);
       if (!built.ok) return sendError(reply, 400, built.error);
+      const updated: SessionRecord = { ...session, pipelineState: {
+        ...session.pipelineState, status: 'running', currentStage: 'likec4-generation', error: undefined,
+        stageOutputs: { ...session.pipelineState.stageOutputs, proposal: { ...proposal, reviewConfirmedAt: new Date().toISOString() } },
+      } };
+      await container.sessionHistoryStore.update(session.id, updated);
+      runSessionInBackground(container, updated, built.ports);
+      reply.code(202);
+      return toSessionView(updated);
+    }),
+  );
 
-      const rules = (await container.architectureRuleStore.list(session.projectId)) ?? [];
+  app.post<{ Params: { sessionId: string; itemId: string } }>(
+    '/api/sessions/:sessionId/proposal/items/:itemId/regenerate',
+    async (request, reply) => locked(request.params.sessionId, reply, async () => {
+      const session = await container.sessionHistoryStore.get(request.params.sessionId);
+      if (!session) return sendError(reply, 404, sessionNotFoundError(request.params.sessionId));
+      if (!editable(session)) return sendError(reply, 409, reviewError('Проверка уже завершена', 'Перегенерация недоступна после подтверждения решений.'));
+      const { stageOutputs } = session.pipelineState;
+      const proposal = stageOutputs.proposal;
+      const item = proposal?.items.find((i) => i.id === request.params.itemId);
+      const candidate = stageOutputs.changeCandidates?.find((c) => c.id === request.params.itemId);
+      if (!proposal || !item || !candidate || !stageOutputs.architectureGraph) return sendError(reply, 404, itemNotFoundError(request.params.itemId));
+      const project = await container.projectStore.get(session.projectId);
+      if (!project) return sendError(reply, 404, sessionNotFoundError(request.params.sessionId));
+      const built = await buildOrchestratorPorts(container, project);
+      if (!built.ok) return sendError(reply, 400, built.error);
+      const rules = await container.architectureRuleStore.list(session.projectId);
       const [regenerated] = await built.ports.proposalGenerator.generate({
-        candidates: [candidate],
-        ambiguities: stageOutputs.ambiguities ?? [],
-        graph: stageOutputs.architectureGraph,
-        rules,
-        knowledgeProviders: built.ports.knowledgeProviders,
+        candidates: [candidate], ambiguities: stageOutputs.ambiguities ?? [],
+        graph: stageOutputs.architectureGraph, rules, knowledgeProviders: built.ports.knowledgeProviders,
       });
       if (!regenerated) return sendError(reply, 500, regenerationFailedError());
-
-      // Свежий контент требует свежего решения человека — 'pending', не сохранённое ранее decision.
-      const updatedItems = proposal.items.map((i) => (i.id === request.params.itemId ? regenerated : i));
-      const updatedSession = {
-        ...session,
-        pipelineState: {
-          ...session.pipelineState,
-          stageOutputs: { ...session.pipelineState.stageOutputs, proposal: { ...proposal, items: updatedItems } },
-        },
-      };
-      await container.sessionHistoryStore.update(session.id, updatedSession);
-
-      return toSessionView(updatedSession);
-    },
+      const updated = { ...session, pipelineState: { ...session.pipelineState,
+        stageOutputs: { ...stageOutputs, proposal: { ...proposal,
+          items: proposal.items.map((i) => i.id === item.id ? { ...regenerated, id: item.id, decision: 'pending' as const } : i),
+        } },
+      } };
+      await container.sessionHistoryStore.update(session.id, updated);
+      return toSessionView(updated);
+    }),
   );
 }
 

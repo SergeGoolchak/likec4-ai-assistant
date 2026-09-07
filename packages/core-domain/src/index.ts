@@ -29,3 +29,4 @@ export * from './ports/documentation-engine.js';
 export * from './ports/persistence.js';
 export * from './ports/project-store.js';
 export * from './ports/architecture-rule-store.js';
+export * from './line-diff.js';

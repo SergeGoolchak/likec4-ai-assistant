@@ -26,7 +26,7 @@ npm start
 ## Структура
 
 - `apps/server` — backend: HTTP API, SSE, оркестрация AI pipeline. `apply-executor.ts` — единственное место, реально пишущее в исходный LikeC4-проект (hash-check → snapshot → запись, с auto-rollback к снэпшоту при частичном сбое записи, Milestone 12); `snapshot-restore.ts` — общая функция восстановления, переиспользуется Rollback/History и auto-rollback'ом.
-- `apps/web` — React SPA. `src/ui-kit/help` — реестр контекстной помощи (`HelpTopic`) + `<HelpAnchor>`; `src/ui-kit/onboarding` — декларативный 13-шаговый onboarding поверх того же реестра; экран `/help` (`HelpCenterPage`) рендерит и реестр, и markdown-документацию из `docs/user-guide/`.
+- `apps/web` — React SPA. `src/ui-kit/help` — реестр контекстной помощи (`HelpTopic`) + `<HelpAnchor>`; `src/ui-kit/onboarding` — краткое 3-шаговое знакомство поверх того же реестра; экран `/help` (`HelpCenterPage`) рендерит и реестр, и markdown-документацию из `docs/user-guide/`.
 - `packages/core-domain` — доменные модели и порты (интерфейсы), от которых зависит весь остальной код. `redactSecrets()` — маскировка распознаваемых форм секретов по содержимому текста (Bearer/API-ключи/AWS/PEM), используется в логгере и в `PipelineOrchestrator.fail()` как вторая линия защиты помимо редакции по именам полей (Milestone 12).
 - `packages/secrets` — локальное шифрованное (AES-256-GCM) хранилище API-ключей/токенов, атомарная запись (temp+rename).
 - `packages/likec4-adapter` — `LikeC4Parser`/`LikeC4Validator` поверх официального npm-пакета `likec4`: построение `ArchitectureGraph`, техническая валидация, рендер views в SVG.

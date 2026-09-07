@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom';
+import { Link, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { CreateProjectPage } from './pages/CreateProjectPage';
@@ -35,6 +35,7 @@ export function App() {
           <Route path="/sessions/:id/preview" element={<PreviewPage />} />
           <Route path="/sessions/:id/apply" element={<ApplyPage />} />
           <Route path="/help" element={<HelpCenterPage />} />
+          <Route path="*" element={<div className="empty-state"><h1 className="page-title">Страница не найдена</h1><p className="page-description mx-auto">Возможно, адрес изменился. Вернитесь к своим проектам.</p><Link to="/" className="btn-primary mt-6">К проектам</Link></div>} />
         </Route>
       </Routes>
     </OnboardingProvider>

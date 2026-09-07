@@ -1,3 +1,4 @@
+import { QueryState } from '../components/QueryState';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,7 +10,7 @@ import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
 export function ConfluenceSettingsPage() {
   const { id: projectId } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['confluence-settings', projectId],
     queryFn: () => getConfluenceSettings(projectId!),
     enabled: Boolean(projectId),
@@ -19,8 +20,8 @@ export function ConfluenceSettingsPage() {
   const [token, setToken] = useState('');
 
   useEffect(() => {
-    if (data?.baseUrl) setBaseUrl(data.baseUrl);
-  }, [data?.baseUrl]);
+    if (data) setBaseUrl(data.baseUrl ?? '');
+  }, [data]);
 
   const mutation = useMutation({
     mutationFn: () => saveConfluenceSettings(projectId!, { baseUrl, token }),
@@ -29,6 +30,8 @@ export function ConfluenceSettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['confluence-settings', projectId] });
     },
   });
+
+  if (error || isLoading) return <QueryState error={error} onRetry={() => refetch()} label="Загружаем настройки…" />;
 
   return (
     <div className="max-w-lg">

@@ -1,7 +1,10 @@
+import { useProjectReadiness } from '../hooks/useProjectReadiness';
+import { ProjectReadiness } from '../components/ProjectReadiness';
+import { QueryState } from '../components/QueryState';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { ApiError, createSession, getConfluenceSettings } from '../api/client';
+import { useMutation } from '@tanstack/react-query';
+import { ApiError, createSession } from '../api/client';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
 import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
@@ -11,11 +14,7 @@ export function NewTaskPage() {
   const navigate = useNavigate();
   const [confluencePageId, setConfluencePageId] = useState('');
 
-  const { data: confluence, isLoading: isLoadingSettings } = useQuery({
-    queryKey: ['confluence-settings', projectId],
-    queryFn: () => getConfluenceSettings(projectId!),
-    enabled: Boolean(projectId),
-  });
+  const readiness = useProjectReadiness(projectId);
 
   const mutation = useMutation({
     mutationFn: () => createSession(projectId!, { confluencePageId }),
@@ -23,7 +22,7 @@ export function NewTaskPage() {
   });
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-2xl">
       <Link to={`/projects/${projectId}`} className="text-sm text-slate-500 hover:text-slate-700">
         ← Назад к проекту
       </Link>
@@ -37,26 +36,7 @@ export function NewTaskPage() {
         сопоставит её со спецификацией.
       </p>
 
-      {!isLoadingSettings && !confluence?.configured && (
-        <div className="mt-4">
-          <ErrorState
-            error={{
-              id: 'new-task.confluence-not-configured',
-              title: 'Confluence не подключён',
-              likelyCause: 'Для этого проекта не настроено подключение к Confluence.',
-              suggestedAction: 'Откройте настройки Confluence и сохраните адрес сервера и токен.',
-              retryable: false,
-              helpTopicId: 'screen.confluence-settings',
-            }}
-          />
-          <Link
-            to={`/projects/${projectId}/confluence-settings`}
-            className="mt-2 inline-block text-sm font-medium text-slate-700 underline hover:text-slate-900"
-          >
-            Перейти к настройкам Confluence
-          </Link>
-        </div>
-      )}
+      {readiness.error ? <QueryState error={readiness.error} onRetry={readiness.refetch} /> : !readiness.ready && <div className="mt-5"><ProjectReadiness projectId={projectId!} /></div>}
 
       <Card className="mt-6">
         <form
@@ -84,7 +64,7 @@ export function NewTaskPage() {
 
           <button
             type="submit"
-            disabled={mutation.isPending || !confluence?.configured}
+            disabled={mutation.isPending || !readiness.ready}
             className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
             {mutation.isPending ? 'Запускаем…' : 'Проанализировать спецификацию'}

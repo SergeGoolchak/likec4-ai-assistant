@@ -142,3 +142,7 @@ export function getProjectHistory(projectId: string): Promise<ProjectHistoryResp
 export function restoreSnapshot(projectId: string, snapshotId: string): Promise<{ ok: true }> {
   return request(`/api/projects/${projectId}/snapshots/${snapshotId}/restore`, { method: 'POST' });
 }
+
+export function confirmProposal(sessionId: string, reviewRevision: string): Promise<SessionView> {
+  return request(`/api/sessions/${sessionId}/proposal/confirm`, { method: 'POST', body: JSON.stringify({ reviewRevision }) });
+}
