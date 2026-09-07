@@ -1,7 +1,7 @@
-import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import type { ApplyResult, RepositoryFile, UserFacingError } from '@likec4-ai/core-domain';
+import { redactSecrets, type UserFacingError } from '@likec4-ai/core-domain';
 import { hasBlockingValidationIssues } from '@likec4-ai/core-pipeline';
+import { ApplyConflictError, ApplyWriteError, executeApply } from '../apply-executor.js';
 import type { AppContainer } from '../composition-root.js';
 import { toSessionView, type SessionView } from './sessions.js';
 
@@ -9,7 +9,8 @@ import { toSessionView, type SessionView } from './sessions.js';
  * Стадия 19 (Apply) реализована как гейт с `run()`, который никогда не
  * вызывается (см. `packages/core-pipeline/src/stages/apply.ts`) — вся
  * реальная работа (hash-check, snapshot, project-level mutex, атомарная
- * запись) происходит здесь. Сознательно не используем
+ * запись, auto-rollback при сбое — см. `apply-executor.ts`, Milestone 12)
+ * происходит здесь. Сознательно не используем
  * `buildOrchestratorPorts`/`runSessionInBackground`, как это делают
  * `questions.ts`/`proposals.ts`: Apply физически не нуждается ни в LLM, ни
  * в Confluence — только в RepositoryAdapter и SnapshotStore, оба уже есть
@@ -43,46 +44,17 @@ export async function registerApplyRoutes(app: FastifyInstance, container: AppCo
       if (!project) return sendError(reply, 404, sessionNotFoundError(request.params.sessionId));
 
       try {
-        const applyResult = await container.withProjectLock(project.id, async () => {
-          const repositoryAdapter = container.createLocalRepositoryAdapter(project.localRepositoryPath);
-
-          // Hash-check (риск №6) — не перезаписывать молча файлы, изменившиеся на диске с момента
-          // начала анализа. Сравниваем по content (не по RepositoryFile.sha — локальный адаптер его
-          // не заполняет), поэтому это честная проверка независимо от конкретного адаптера.
-          const currentFiles = await repositoryAdapter.readAll();
-          const currentByPath = new Map(currentFiles.map((f) => [f.path, f.content]));
-          const analysisByPath = new Map(existingFiles.map((f) => [f.path, f.content]));
-          const conflicts: string[] = [];
-          for (const entry of diff) {
-            const current = currentByPath.get(entry.path);
-            const atAnalysisTime = analysisByPath.get(entry.path);
-            if (sha256(current) !== sha256(atAnalysisTime)) conflicts.push(entry.path);
-          }
-          if (conflicts.length > 0) throw new ApplyConflictError(conflicts);
-
-          const snapshot = await container.snapshotStore.create(project.id, currentFiles, {
-            reason: 'pre-apply',
+        const applyResult = await container.withProjectLock(project.id, () =>
+          executeApply({
+            repositoryAdapter: container.createLocalRepositoryAdapter(project.localRepositoryPath),
+            snapshotStore: container.snapshotStore,
+            projectId: project.id,
             sessionId: session.id,
-            createdAt: new Date().toISOString(),
-          });
-
-          const changedFiles: RepositoryFile[] = diff
-            .filter((entry) => entry.changeType !== 'deleted')
-            .map((entry) => ({ path: entry.path, content: entry.after! }));
-          const deletedPaths = diff.filter((entry) => entry.changeType === 'deleted').map((entry) => entry.path);
-          await repositoryAdapter.writeFiles(changedFiles);
-          if (deletedPaths.length > 0) await repositoryAdapter.deleteFiles(deletedPaths);
-
-          const result: ApplyResult = {
-            appliedAt: new Date().toISOString(),
-            snapshotId: snapshot.id,
-            appliedItemIds: proposal.items.filter((i) => i.decision === 'approved' || i.decision === 'edited').map((i) => i.id),
-            rejectedItemIds: proposal.items.filter((i) => i.decision === 'rejected').map((i) => i.id),
-            filesChanged: [...changedFiles.map((f) => f.path), ...deletedPaths],
-            rollbackAvailable: true,
-          };
-          return result;
-        });
+            existingFiles,
+            diff,
+            proposal,
+          }),
+        );
 
         const at = new Date().toISOString();
         const updatedSession = {
@@ -104,18 +76,6 @@ export async function registerApplyRoutes(app: FastifyInstance, container: AppCo
       }
     },
   );
-}
-
-class ApplyConflictError extends Error {
-  constructor(readonly paths: string[]) {
-    super(`Files changed on disk since analysis started: ${paths.join(', ')}`);
-  }
-}
-
-function sha256(content: string | undefined): string {
-  return createHash('sha256')
-    .update(content ?? '', 'utf8')
-    .digest('hex');
 }
 
 function sendError(reply: FastifyReply, status: number, error: UserFacingError) {
@@ -176,7 +136,18 @@ function fileConflictError(paths: string[]): UserFacingError {
 }
 
 function applyFailedError(err: unknown): UserFacingError {
-  const message = err instanceof Error ? err.message : String(err);
+  const message = redactSecrets(err instanceof Error ? err.message : String(err));
+  if (err instanceof ApplyWriteError) {
+    return {
+      id: 'apply.write-failed',
+      title: 'Не удалось записать изменения',
+      likelyCause: message,
+      suggestedAction: err.rolledBack
+        ? 'Изменения автоматически откачены к состоянию до Apply — репозиторий не повреждён. Повторите попытку.'
+        : 'Не удалось автоматически откатить изменения — проверьте состояние репозитория вручную и восстановите нужный снэпшот из History.',
+      retryable: true,
+    };
+  }
   return {
     id: 'apply.write-failed',
     title: 'Не удалось записать изменения',

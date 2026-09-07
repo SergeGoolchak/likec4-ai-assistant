@@ -25,10 +25,10 @@ npm start
 
 ## Структура
 
-- `apps/server` — backend: HTTP API, SSE, оркестрация AI pipeline.
+- `apps/server` — backend: HTTP API, SSE, оркестрация AI pipeline. `apply-executor.ts` — единственное место, реально пишущее в исходный LikeC4-проект (hash-check → snapshot → запись, с auto-rollback к снэпшоту при частичном сбое записи, Milestone 12); `snapshot-restore.ts` — общая функция восстановления, переиспользуется Rollback/History и auto-rollback'ом.
 - `apps/web` — React SPA. `src/ui-kit/help` — реестр контекстной помощи (`HelpTopic`) + `<HelpAnchor>`; `src/ui-kit/onboarding` — декларативный 13-шаговый onboarding поверх того же реестра; экран `/help` (`HelpCenterPage`) рендерит и реестр, и markdown-документацию из `docs/user-guide/`.
-- `packages/core-domain` — доменные модели и порты (интерфейсы), от которых зависит весь остальной код. Остальные технологии-адаптеры появятся в `packages/*` по мере прохождения milestones.
-- `packages/secrets` — локальное шифрованное хранилище API-ключей/токенов.
+- `packages/core-domain` — доменные модели и порты (интерфейсы), от которых зависит весь остальной код. `redactSecrets()` — маскировка распознаваемых форм секретов по содержимому текста (Bearer/API-ключи/AWS/PEM), используется в логгере и в `PipelineOrchestrator.fail()` как вторая линия защиты помимо редакции по именам полей (Milestone 12).
+- `packages/secrets` — локальное шифрованное (AES-256-GCM) хранилище API-ключей/токенов, атомарная запись (temp+rename).
 - `packages/likec4-adapter` — `LikeC4Parser`/`LikeC4Validator` поверх официального npm-пакета `likec4`: построение `ArchitectureGraph`, техническая валидация, рендер views в SVG.
 - `packages/repo-local-adapter` — `LocalRepositoryAdapter`: чтение/атомарная запись/удаление `.c4`/`.likec4` файлов локальной папки, определение git branch/commit.
 - `packages/persistence` — `SqliteProjectStore`, `FsSnapshotStore`, `SqliteArchitectureRuleStore` и `SqliteEmbeddingIndex` поверх встроенного `node:sqlite`.
@@ -52,6 +52,8 @@ npm run test
 ```
 
 Тот же набор команд гоняется в CI на каждый push в `main` и на каждый PR (`.github/workflows/ci.yml`). `npm run lint` включает `scripts/check-help-completeness.mjs` — проверяет, что каждый экран `apps/web/src/pages/*.tsx` содержит хотя бы один `<HelpAnchor>`, ссылающийся на реально существующую запись в реестре.
+
+Отдельный шаг CI — `npm run security-check` (`scripts/check-secret-leaks.mjs`): сканирует все отслеживаемые git-файлы на паттерны реальных секретов (OpenAI-подобные ключи, AWS access key id, PEM-блоки приватных ключей) без внешних зависимостей вроде gitleaks.
 
 ## Лицензия
 

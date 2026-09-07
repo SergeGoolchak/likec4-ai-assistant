@@ -16,7 +16,8 @@
     "start": "npm run build && npm run start -w apps/server",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint . && node scripts/check-help-completeness.mjs",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "security-check": "node scripts/check-secret-leaks.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
