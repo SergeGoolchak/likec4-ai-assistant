@@ -5,6 +5,7 @@ import { ConfluenceServerAdapter } from '@likec4-ai/confluence-adapter';
 import { OpenAILLMProvider, OpenAIEmbeddingProvider } from '@likec4-ai/llm-openai';
 import { LLMChangeEngine } from '@likec4-ai/change-engine';
 import { LLMProposalGenerator } from '@likec4-ai/proposal-generator';
+import { RuleBasedArchitecturalReviewer } from '@likec4-ai/architecture-reviewer';
 import {
   openDatabase,
   SqliteProjectStore,
@@ -14,6 +15,7 @@ import {
 } from '@likec4-ai/persistence';
 import { PipelineOrchestrator } from '@likec4-ai/core-pipeline';
 import type {
+  ArchitecturalReviewer,
   ArchitectureRuleStore,
   ChangeEngine,
   ConfluenceAdapter,
@@ -47,6 +49,7 @@ export interface AppContainer {
   projectStore: ProjectStore;
   snapshotStore: SnapshotStore;
   architectureRuleStore: ArchitectureRuleStore;
+  architecturalReviewer: ArchitecturalReviewer;
   sessionHistoryStore: SessionHistoryStore;
   sessionEvents: SessionEventBus;
   pipelineOrchestrator: PipelineOrchestrator;
@@ -77,6 +80,7 @@ export async function createAppContainer(config: AppConfig): Promise<AppContaine
     projectStore: new SqliteProjectStore(db),
     snapshotStore: new FsSnapshotStore({ db, snapshotsRootDir: config.snapshotsRootDir }),
     architectureRuleStore: new SqliteArchitectureRuleStore(db),
+    architecturalReviewer: new RuleBasedArchitecturalReviewer(),
     sessionHistoryStore: new SqliteSessionHistoryStore(db),
     sessionEvents: new SessionEventBus(),
     pipelineOrchestrator: new PipelineOrchestrator(),

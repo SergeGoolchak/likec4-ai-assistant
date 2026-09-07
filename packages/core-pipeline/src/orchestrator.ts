@@ -10,10 +10,14 @@ import { ambiguityDetectionStage } from './stages/ambiguity-detection.js';
 import { userClarificationStage } from './stages/user-clarification.js';
 import { proposalGenerationStage } from './stages/proposal-generation.js';
 import { userReviewStage } from './stages/user-review.js';
+import { likec4GenerationStage } from './stages/likec4-generation.js';
+import { validationStage } from './stages/validation.js';
+import { architectureReviewStage } from './stages/architecture-review.js';
+import { repairStage } from './stages/repair.js';
 import { computePendingQuestionIds } from './pending-questions.js';
 import type { OrchestratorPorts, PipelineStageDef } from './stage.js';
 
-/** Стадии 1-12 плана. Стадия 13 (LikeC4 Generation, Milestone 9) присоединится следующей. */
+/** Стадии 1-16 плана. Стадия 17 (Diff, Milestone 10) присоединится следующей. */
 export const STAGES: PipelineStageDef[] = [
   loadConfluenceStage,
   parseSpecificationStage,
@@ -26,6 +30,10 @@ export const STAGES: PipelineStageDef[] = [
   userClarificationStage,
   proposalGenerationStage,
   userReviewStage,
+  likec4GenerationStage,
+  validationStage,
+  architectureReviewStage,
+  repairStage,
 ];
 
 export interface RunOptions {

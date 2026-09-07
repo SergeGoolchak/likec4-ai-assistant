@@ -1,9 +1,11 @@
 import type { OrchestratorPorts } from '@likec4-ai/core-pipeline';
 import type {
+  ArchitecturalReviewer,
   ArchitectureRuleStore,
   ChangeEngine,
   ConfluenceAdapter,
   LikeC4Parser,
+  LikeC4Validator,
   LLMProvider,
   ProjectRecord,
   ProposalGenerator,
@@ -25,6 +27,8 @@ export interface FullOrchestratorPorts extends OrchestratorPorts {
   llmProvider: LLMProvider;
   changeEngine: ChangeEngine;
   proposalGenerator: ProposalGenerator;
+  likec4Validator: LikeC4Validator;
+  architecturalReviewer: ArchitecturalReviewer;
   architectureRuleStore: ArchitectureRuleStore;
 }
 
@@ -64,6 +68,8 @@ export async function buildOrchestratorPorts(container: AppContainer, project: P
       llmProvider,
       changeEngine,
       proposalGenerator,
+      likec4Validator: container.likec4Validator,
+      architecturalReviewer: container.architecturalReviewer,
       architectureRuleStore: container.architectureRuleStore,
     },
   };

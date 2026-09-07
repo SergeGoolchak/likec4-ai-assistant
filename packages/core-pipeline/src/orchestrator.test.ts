@@ -4,6 +4,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
+  ArchitecturalReviewer,
+  ArchitecturalReviewInput,
+  ArchitecturalValidationResult,
   ArchitectureChangeCandidate,
   ArchitectureGraph,
   ChangeEngine,
@@ -16,6 +19,7 @@ import type {
   GapAnalysisInput,
   LikeC4Parser,
   LikeC4ParseResult,
+  LikeC4Validator,
   LLMCallOptions,
   LLMMessage,
   LLMProvider,
@@ -23,9 +27,12 @@ import type {
   ProposalGenerationInput,
   ProposalGenerator,
   ProposalItem,
+  ProposalRepairInput,
+  RenderedView,
   RepositoryAdapter,
   RepositoryFile,
   SessionRecord,
+  TechnicalValidationResult,
   UserFacingStatus,
 } from '@likec4-ai/core-domain';
 import { openDatabase, SqliteSessionHistoryStore } from '@likec4-ai/persistence';
@@ -155,10 +162,29 @@ class FakeProposalGenerator implements ProposalGenerator {
       type: c.type,
       title: 'Fake proposal item',
       targetElementId: c.matchedElementId,
+      proposedLikeC4Code: 'service orderService "Order Service" { description "fake" }',
       explanation: { what: 'fake', why: 'fake', impact: 'fake', confidence: 0.9, assumptions: [] },
       sources: c.sources.length > 0 ? c.sources : [{ kind: 'existing-likec4-element' as const, refId: 'orderService', label: 'fake source' }],
       decision: 'pending' as const,
     }));
+  }
+  async repair(input: ProposalRepairInput): Promise<ProposalItem> {
+    return { ...input.item, proposedLikeC4Code: 'repaired' };
+  }
+}
+
+class FakeLikeC4Validator implements LikeC4Validator {
+  async validateTechnical(_files: RepositoryFile[]): Promise<TechnicalValidationResult> {
+    return { ok: true, diagnostics: [] };
+  }
+  async renderViewsPreview(): Promise<RenderedView[]> {
+    return [];
+  }
+}
+
+class FakeArchitecturalReviewer implements ArchitecturalReviewer {
+  async review(_input: ArchitecturalReviewInput): Promise<ArchitecturalValidationResult> {
+    return { ok: true, findings: [] };
   }
 }
 
@@ -261,17 +287,25 @@ test('runs stages 1-11 straight through when nothing needs clarifying, then paus
     };
     await sessionStore.update('s1', approved);
 
+    const likec4Validator = new FakeLikeC4Validator();
+    const architecturalReviewer = new FakeArchitecturalReviewer();
     const resumeOrchestrator = new PipelineOrchestrator();
     const result = await resumeOrchestrator.run({
       session: approved,
-      ports: { confluenceAdapter, repositoryAdapter, likec4Parser, llmProvider, changeEngine, proposalGenerator },
+      ports: { confluenceAdapter, repositoryAdapter, likec4Parser, llmProvider, changeEngine, proposalGenerator, likec4Validator, architecturalReviewer },
       sessionStore,
     });
 
+    // Стадии 13-15 реально выполнились (likec4-generation, validation, architecture-review);
+    // 16 (repair) — гейт-подобная стадия: isDone сразу true (нет блокирующих проблем), run() не вызывался.
     assert.equal(result.pipelineState.status, 'completed');
-    // 9 выполненных стадий (до proposal-generation включительно) + 1 запись о постановке на паузу
-    // на user-review; сам переход paused → completed при повторном run() новую запись не добавляет.
-    assert.equal(result.userFacingTimeline.length, 10);
+    assert.ok(result.pipelineState.stageOutputs.generatedFiles && result.pipelineState.stageOutputs.generatedFiles.length > 0);
+    assert.equal(result.pipelineState.stageOutputs.validationResult?.technical?.ok, true);
+    assert.equal(result.pipelineState.stageOutputs.validationResult?.architectural?.ok, true);
+    assert.equal(result.pipelineState.stageOutputs.repairAttempts, undefined, 'repair.run() must never be called when there is nothing to repair');
+    // 9 выполненных стадий 1-9 (первый run) + 1 запись о постановке на паузу на user-review +
+    // 3 стадии 13-15, реально выполненные при возобновлении (14/15/16 гейт-стадия repair не в счёт).
+    assert.equal(result.userFacingTimeline.length, 13);
 
     const persisted = await sessionStore.get('s1');
     assert.equal(persisted?.pipelineState.status, 'completed');

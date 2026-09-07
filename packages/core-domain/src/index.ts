@@ -23,6 +23,7 @@ export * from './ports/likec4.js';
 export * from './ports/knowledge-provider.js';
 export * from './ports/change-engine.js';
 export * from './ports/proposal-generator.js';
+export * from './ports/architectural-reviewer.js';
 export * from './ports/documentation-engine.js';
 export * from './ports/persistence.js';
 export * from './ports/project-store.js';

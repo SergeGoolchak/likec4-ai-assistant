@@ -7,6 +7,7 @@ import type {
   ProposalGenerator,
   ProposalItem,
   ProposalItemType,
+  ProposalRepairInput,
   SourceReference,
 } from '@likec4-ai/core-domain';
 import { ContextBuilder, renderElementForContext, renderRelationshipForContext } from '@likec4-ai/context-builder';
@@ -20,6 +21,12 @@ interface DraftedItem {
   confidence: number;
   assumptions: string[];
   proposedLikeC4Code: string;
+}
+
+interface RepairedCode {
+  proposedLikeC4Code: string;
+  /** Кратко, что было исправлено — добавляется в assumptions чиненного item, а не скрывается. */
+  whatWasFixed: string;
 }
 
 /**
@@ -57,6 +64,65 @@ export class LLMProposalGenerator implements ProposalGenerator {
       items.push(await this.#generateOne(group, input));
     }
     return items;
+  }
+
+  /**
+   * Стадия 16 (Repair, Milestone 9). В отличие от `generate()`, не начинает с нуля:
+   * даёт модели её же прошлый черновик + конкретные diagnostics/findings и просит
+   * исправить именно их, сохранив id/type/targetElementId — то, что уже было
+   * решено человеком на User Review, `repair` не пересматривает.
+   */
+  async repair(input: ProposalRepairInput): Promise<ProposalItem> {
+    const { item } = input;
+    const context = await this.#contextBuilder.build({
+      focusText: item.explanation.what,
+      graph: input.graph,
+      candidateElementIds: item.targetElementId ? [item.targetElementId] : [],
+      rules: input.rules,
+    });
+    const contextText = [
+      ...context.elements.map(renderElementForContext),
+      ...context.relationships.map((rel) => renderRelationshipForContext(rel, input.graph)),
+      ...context.applicableRules.map((rule) => `Правило: ${rule.title} — ${rule.description}`),
+    ].join('\n');
+
+    const repaired = await this.#repairDraft(item, contextText, input);
+
+    return {
+      ...item,
+      proposedLikeC4Code: repaired.proposedLikeC4Code,
+      explanation: { ...item.explanation, assumptions: [...item.explanation.assumptions, `Repair: ${repaired.whatWasFixed}`] },
+    };
+  }
+
+  async #repairDraft(item: ProposalItem, contextText: string, input: ProposalRepairInput): Promise<RepairedCode> {
+    const diagnosticsText = input.diagnostics.map((d) => `- [${d.severity}] ${d.file}: ${d.message}`).join('\n');
+    const findingsText = input.findings.map((f) => `- [${f.severity}] ${f.message}`).join('\n');
+
+    const messages = [
+      {
+        role: 'system' as const,
+        content:
+          'Ты исправляешь фрагмент кода LikeC4, который не прошёл валидацию. ' +
+          'Сохраняй тот же id элемента/связи, тот же смысл изменения — исправляй ТОЛЬКО то, на что указывают diagnostics/findings, ' +
+          'не переписывай остальное и не меняй архитектурное решение. ' +
+          'Ответь строго JSON: {"proposedLikeC4Code": string, "whatWasFixed": string}.',
+      },
+      {
+        role: 'user' as const,
+        content: [
+          `Текущий фрагмент:\n${item.proposedLikeC4Code ?? '(пусто)'}`,
+          `Контекст существующей архитектуры:\n${contextText || '(пусто)'}`,
+          diagnosticsText ? `Технические диагностики:\n${diagnosticsText}` : '',
+          findingsText ? `Архитектурные находки:\n${findingsText}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+      },
+    ];
+
+    const result = await this.#llmProvider.completeJSON<RepairedCode>(messages, { stage: 'repair' });
+    return result.content;
   }
 
   async #generateOne(group: ArchitectureChangeCandidate[], input: ProposalGenerationInput): Promise<ProposalItem> {

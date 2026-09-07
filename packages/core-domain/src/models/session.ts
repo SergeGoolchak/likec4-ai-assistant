@@ -53,7 +53,15 @@ export interface PipelineState {
     ambiguities: ClarificationQuestion[];
     proposal: Proposal;
     generatedFiles: RepositoryFile[];
-    validationResult: { technical: TechnicalValidationResult; architectural: ArchitecturalValidationResult };
+    /**
+     * Оба поля опциональны, а не только сам `validationResult` — стадии 14
+     * (Validation) и 15 (Architecture Review) пишут сюда по отдельности, и
+     * между их выполнением `architectural` объективно ещё не существует.
+     * Раньше оба поля были обязательны внутри объекта, из-за чего стадия 14
+     * не могла честно записать "technical посчитан, architectural — ещё нет"
+     * без выдумывания заглушки; исправлено при реализации Milestone 9.
+     */
+    validationResult: { technical?: TechnicalValidationResult; architectural?: ArchitecturalValidationResult };
     repairAttempts: RepairAttemptLog[];
     diff: FileDiff[];
     previewViews: RenderedView[];

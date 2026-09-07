@@ -1,9 +1,11 @@
 import type {
+  ArchitecturalReviewer,
   ArchitectureRuleStore,
   ChangeEngine,
   ConfluenceAdapter,
   KnowledgeProvider,
   LikeC4Parser,
+  LikeC4Validator,
   LLMProvider,
   PipelineState,
   PipelineStageId,
@@ -12,7 +14,7 @@ import type {
   SessionRecord,
 } from '@likec4-ai/core-domain';
 
-/** Порты, нужные стадиям 1-12 (Milestone 7 переиспользует `changeEngine`, Milestone 8 добавляет `proposalGenerator`). Стадии 13+ добавят свои по мере реализации в следующих milestones. */
+/** Порты, нужные стадиям 1-16 (Milestone 9 добавляет `likec4Validator`/`architecturalReviewer`; `proposalGenerator` из Milestone 8 переиспользуется стадией 16 для repair). Стадии 17+ добавят свои по мере реализации в следующих milestones. */
 export interface OrchestratorPorts {
   confluenceAdapter: ConfluenceAdapter;
   repositoryAdapter: RepositoryAdapter;
@@ -20,8 +22,12 @@ export interface OrchestratorPorts {
   /** LLM-зависимые стадии 6-8 (Milestone 6) не работают без него — опционален, чтобы стадии 1-5 оставались тестируемы без AI provider вообще. */
   llmProvider?: LLMProvider;
   changeEngine?: ChangeEngine;
-  /** Стадия 11 (Milestone 8) — опционален по той же причине, что и changeEngine. */
+  /** Стадия 11 (Milestone 8) и стадия 16 (Repair, Milestone 9) — опционален по той же причине, что и changeEngine. */
   proposalGenerator?: ProposalGenerator;
+  /** Стадия 14 (Milestone 9). Уже существовал как порт с Milestone 1 (`renderViewsPreview`), просто не был частью OrchestratorPorts, пока не появился реальный потребитель-стадия. */
+  likec4Validator?: LikeC4Validator;
+  /** Стадия 15 (Milestone 9). */
+  architecturalReviewer?: ArchitecturalReviewer;
   architectureRuleStore?: ArchitectureRuleStore;
   /** Global + Project Knowledge Base — участвуют в стадиях 6 и 11 как дополнительный контекст, не блокируют pipeline при отсутствии. */
   knowledgeProviders?: KnowledgeProvider[];

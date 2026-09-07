@@ -54,6 +54,11 @@ export interface SessionSummary {
   matchedRequirementCount?: number;
   changeCandidateCount?: number;
   ambiguityCount?: number;
+  generatedFileCount?: number;
+  technicalDiagnosticsCount?: number;
+  architecturalFindingsCount?: number;
+  repairAttemptCount?: number;
+  hasBlockingValidationIssues?: boolean;
 }
 
 export interface SessionView {

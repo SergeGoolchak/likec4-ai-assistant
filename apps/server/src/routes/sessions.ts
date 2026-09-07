@@ -29,6 +29,12 @@ interface SessionSummary {
   matchedRequirementCount?: number;
   changeCandidateCount?: number;
   ambiguityCount?: number;
+  generatedFileCount?: number;
+  technicalDiagnosticsCount?: number;
+  architecturalFindingsCount?: number;
+  repairAttemptCount?: number;
+  /** undefined => валидация ещё не прошла оба уровня; false => есть техническая ошибка или must-находка, ждём repair. */
+  hasBlockingValidationIssues?: boolean;
 }
 
 export interface SessionView {
@@ -179,6 +185,14 @@ export function toSessionView(session: SessionRecord): SessionView {
       matchedRequirementCount: outputs.entityMatches?.filter((m) => m.matchedElementId).length,
       changeCandidateCount: outputs.changeCandidates?.length,
       ambiguityCount: outputs.ambiguities?.length,
+      generatedFileCount: outputs.generatedFiles?.length,
+      technicalDiagnosticsCount: outputs.validationResult?.technical?.diagnostics.length,
+      architecturalFindingsCount: outputs.validationResult?.architectural?.findings.length,
+      repairAttemptCount: outputs.repairAttempts?.length,
+      hasBlockingValidationIssues:
+        outputs.validationResult?.technical && outputs.validationResult.architectural
+          ? !outputs.validationResult.technical.ok || outputs.validationResult.architectural.findings.some((f) => f.severity === 'must')
+          : undefined,
     },
     questions: outputs.ambiguities ?? [],
     proposal: outputs.proposal,

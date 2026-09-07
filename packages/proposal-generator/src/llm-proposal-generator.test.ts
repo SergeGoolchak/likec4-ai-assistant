@@ -9,6 +9,7 @@ import type {
   LLMMessage,
   LLMProvider,
   LLMResult,
+  ProposalItem,
 } from '@likec4-ai/core-domain';
 import { LLMProposalGenerator } from './llm-proposal-generator.js';
 
@@ -252,4 +253,51 @@ test('regression: the prompt includes the already-decided type/target and the as
   const systemMessage = llm.lastMessages.find((m) => m.role === 'system')?.content ?? '';
   assert.match(systemMessage, /modified-element/);
   assert.match(systemMessage, /orderService/);
+});
+
+function proposalItem(overrides: Partial<ProposalItem> & Pick<ProposalItem, 'id'>): ProposalItem {
+  return {
+    type: 'new-element',
+    title: 'Refund Service',
+    proposedLikeC4Code: 'service refundService "Refund Service" {\n  descriptio "typo"\n}',
+    explanation: { what: 'w', why: 'y', impact: 'i', confidence: 0.8, assumptions: [] },
+    sources: [],
+    decision: 'approved',
+    ...overrides,
+  };
+}
+
+test('repair keeps id/type/target unchanged and folds what was fixed into assumptions, not hidden', async () => {
+  const llm = new ScriptedLLMProvider([{ proposedLikeC4Code: 'service refundService "Refund Service" {\n  description "fixed"\n}', whatWasFixed: 'опечатка в имени свойства description' }]);
+  const generator = new LLMProposalGenerator({ llmProvider: llm });
+
+  const item = proposalItem({ id: 'c1', type: 'modified-element', targetElementId: 'orderService' });
+  const diagnostics = [{ severity: 'error' as const, message: 'unknown property "descriptio"', file: 'generated/refund-service.c4' }];
+
+  const repaired = await generator.repair({ item, diagnostics, findings: [], graph: fixtureGraph(), rules: [] });
+
+  assert.equal(repaired.id, 'c1');
+  assert.equal(repaired.type, 'modified-element');
+  assert.equal(repaired.targetElementId, 'orderService');
+  assert.equal(repaired.proposedLikeC4Code, 'service refundService "Refund Service" {\n  description "fixed"\n}');
+  assert.ok(repaired.explanation.assumptions.some((a) => a.includes('опечатка')));
+});
+
+test('regression: the repair prompt includes the current broken code and the specific diagnostics, not a fresh blank slate', async () => {
+  const llm = new ScriptedLLMProvider([{ proposedLikeC4Code: 'fixed code', whatWasFixed: 'fixed' }]);
+  const generator = new LLMProposalGenerator({ llmProvider: llm });
+
+  const item = proposalItem({ id: 'c1', proposedLikeC4Code: 'service refundService "Refund Service" {\n  descriptio "typo"\n}' });
+  await generator.repair({
+    item,
+    diagnostics: [{ severity: 'error', message: 'unknown property "descriptio"', file: 'generated/refund-service.c4' }],
+    findings: [{ ruleId: 'r1', severity: 'should', message: 'naming looks off', affectedItemId: 'c1', autoFixable: false }],
+    graph: fixtureGraph(),
+    rules: [],
+  });
+
+  const userMessage = llm.lastMessages.find((m) => m.role === 'user')?.content ?? '';
+  assert.match(userMessage, /descriptio "typo"/);
+  assert.match(userMessage, /unknown property "descriptio"/);
+  assert.match(userMessage, /naming looks off/);
 });

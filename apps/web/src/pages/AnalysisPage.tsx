@@ -23,6 +23,10 @@ const STAGE_ORDER: { id: PipelineStageId; label: string; isDone: (s: SessionView
     label: 'Проверка предложений вами',
     isDone: (s) => (s.proposal?.items ?? []).every((item) => item.decision === 'approved' || item.decision === 'rejected' || item.decision === 'edited'),
   },
+  { id: 'likec4-generation', label: 'Генерация LikeC4', isDone: (s) => s.summary.generatedFileCount !== undefined },
+  { id: 'validation', label: 'Техническая валидация', isDone: (s) => s.summary.technicalDiagnosticsCount !== undefined },
+  { id: 'architecture-review', label: 'Архитектурная проверка', isDone: (s) => s.summary.architecturalFindingsCount !== undefined },
+  { id: 'repair', label: 'Исправление ошибок валидации', isDone: (s) => s.summary.hasBlockingValidationIssues === false },
 ];
 
 export function AnalysisPage() {
@@ -149,6 +153,14 @@ export function AnalysisPage() {
               <Stat label="Принято" value={session.proposal.items.filter((i) => i.decision === 'approved').length} />
               <Stat label="Отклонено" value={session.proposal.items.filter((i) => i.decision === 'rejected').length} />
               <Stat label="Отредактировано" value={session.proposal.items.filter((i) => i.decision === 'edited').length} />
+            </div>
+          )}
+          {session.summary.generatedFileCount !== undefined && (
+            <div className="mt-4 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 sm:grid-cols-4">
+              <Stat label="Файлов сгенерировано" value={session.summary.generatedFileCount} />
+              <Stat label="Технических диагностик" value={session.summary.technicalDiagnosticsCount} />
+              <Stat label="Архитектурных находок" value={session.summary.architecturalFindingsCount} />
+              <Stat label="Попыток исправления" value={session.summary.repairAttemptCount ?? 0} />
             </div>
           )}
           {Boolean(session.summary.existingModelDiagnosticsCount) && (
