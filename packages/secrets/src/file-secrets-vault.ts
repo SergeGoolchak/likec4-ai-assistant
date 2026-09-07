@@ -1,5 +1,5 @@
-import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
-import { mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
+import { randomBytes, createCipheriv, createDecipheriv, randomUUID } from 'node:crypto';
+import { mkdir, readFile, writeFile, chmod, rename, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { SecretsVault } from '@likec4-ai/core-domain';
 
@@ -98,6 +98,12 @@ export class FileSecretsVault implements SecretsVault {
     return JSON.parse(decrypted.toString('utf8')) as Record<string, string>;
   }
 
+  /**
+   * Temp-write-then-rename (Milestone 12, риск №6/№5 пересекаются здесь) — тот же паттерн, что и
+   * `LocalRepositoryAdapter.writeFiles`: убийство процесса посреди записи не может оставить
+   * `secrets.enc` обрезанным/повреждённым, так как `rename` — атомарная операция на той же ФС, а
+   * до неё существующий файл вообще не трогается.
+   */
   async #writeStore(store: Record<string, string>): Promise<void> {
     const key = await this.#getOrCreateKey();
     const iv = randomBytes(IV_LENGTH);
@@ -109,6 +115,13 @@ export class FileSecretsVault implements SecretsVault {
       data: encrypted.toString('base64'),
     };
     await mkdir(dirname(this.#secretsFilePath), { recursive: true, mode: 0o700 });
-    await writeFile(this.#secretsFilePath, JSON.stringify(blob), { mode: 0o600 });
+    const tempPath = `${this.#secretsFilePath}.tmp-${randomUUID()}`;
+    try {
+      await writeFile(tempPath, JSON.stringify(blob), { mode: 0o600 });
+      await rename(tempPath, this.#secretsFilePath);
+    } catch (err) {
+      await rm(tempPath, { force: true }).catch(() => undefined);
+      throw err;
+    }
   }
 }

@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import type { Snapshot, SessionRecordSummary, UserFacingError } from '@likec4-ai/core-domain';
+import { redactSecrets, type Snapshot, type SessionRecordSummary, type UserFacingError } from '@likec4-ai/core-domain';
 import type { AppContainer } from '../composition-root.js';
+import { restoreFilesFromSnapshot } from '../snapshot-restore.js';
 import { toSessionView, type SessionView } from './sessions.js';
 
 interface HistoryResponse {
@@ -61,17 +62,8 @@ export async function registerHistoryRoutes(app: FastifyInstance, container: App
 
 async function restoreSnapshot(container: AppContainer, projectId: string, localRepositoryPath: string, snapshotId: string): Promise<void> {
   await container.withProjectLock(projectId, async () => {
-    const files = await container.snapshotStore.restore(snapshotId);
     const repositoryAdapter = container.createLocalRepositoryAdapter(localRepositoryPath);
-    await repositoryAdapter.writeFiles(files);
-
-    // Настоящий откат, а не частичная перезапись — файлы, появившиеся ПОСЛЕ снэпшота (например
-    // новый файл, созданный Apply), нужно удалить, иначе репозиторий не вернётся byte-for-byte
-    // к прежнему состоянию (см. RepositoryAdapter.deleteFiles, добавлен именно для этого случая).
-    const snapshotPaths = new Set(files.map((f) => f.path));
-    const currentPaths = await repositoryAdapter.listLikeC4Files();
-    const orphaned = currentPaths.filter((path) => !snapshotPaths.has(path));
-    if (orphaned.length > 0) await repositoryAdapter.deleteFiles(orphaned);
+    await restoreFilesFromSnapshot(repositoryAdapter, container.snapshotStore, snapshotId);
   });
 }
 
@@ -107,11 +99,12 @@ function rollbackNotAvailableError(): UserFacingError {
     likelyCause: 'Эта сессия ещё не применена, либо уже была откачена ранее.',
     suggestedAction: 'Проверьте статус сессии на экране Apply, либо восстановите нужный снэпшот вручную из History.',
     retryable: false,
+    helpTopicId: 'field.rollback',
   };
 }
 
 function restoreFailedError(err: unknown): UserFacingError {
-  const message = err instanceof Error ? err.message : String(err);
+  const message = redactSecrets(err instanceof Error ? err.message : String(err));
   return {
     id: 'history.restore-failed',
     title: 'Не удалось восстановить снэпшот',

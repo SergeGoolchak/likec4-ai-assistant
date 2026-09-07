@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ApiError, getProject } from '../api/client';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
+import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
 
 export function ProjectDashboardPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,7 +23,10 @@ export function ProjectDashboardPage() {
     <div>
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">{project.name}</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">
+            {project.name}
+            <HelpAnchor topicId="screen.project-dashboard" />
+          </h1>
           {project.description && <p className="mt-1 text-slate-500">{project.description}</p>}
           <p className="mt-2 text-xs text-slate-400">{project.localRepositoryPath}</p>
         </div>

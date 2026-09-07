@@ -82,6 +82,7 @@ function confluenceNotConfiguredError(): UserFacingError {
     likelyCause: 'В настройках проекта не указан адрес Confluence или не сохранён токен доступа.',
     suggestedAction: 'Откройте настройки проекта и подключите Confluence перед запуском анализа.',
     retryable: false,
+    helpTopicId: 'screen.confluence-settings',
   };
 }
 
@@ -92,5 +93,6 @@ function aiNotConfiguredError(): UserFacingError {
     likelyCause: 'В настройках проекта не сохранён OpenAI API key.',
     suggestedAction: 'Откройте настройки проекта и подключите AI-провайдера перед запуском анализа.',
     retryable: false,
+    helpTopicId: 'screen.ai-settings',
   };
 }

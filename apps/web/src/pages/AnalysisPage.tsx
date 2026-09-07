@@ -6,6 +6,7 @@ import { ApiError, answerQuestion } from '../api/client';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
 import { QuestionCard, type QuestionAnswerInput } from '../components/QuestionCard';
+import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
 
 const STAGE_ORDER: { id: PipelineStageId; label: string; isDone: (s: SessionView) => boolean }[] = [
   { id: 'load-confluence', label: 'Чтение Confluence', isDone: (s) => s.summary.confluenceTitle !== undefined },
@@ -77,7 +78,10 @@ export function AnalysisPage() {
         ← Назад к проекту
       </Link>
 
-      <h1 className="mt-2 text-2xl font-semibold text-slate-900">Анализ спецификации</h1>
+      <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+        Анализ спецификации
+        <HelpAnchor topicId="screen.analysis" />
+      </h1>
       {connectionLost && session.status === 'running' && (
         <p className="mt-1 text-xs text-amber-600">Соединение для live-обновлений прервано — статус может отставать.</p>
       )}

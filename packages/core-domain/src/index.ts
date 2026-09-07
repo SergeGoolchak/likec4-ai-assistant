@@ -13,6 +13,7 @@ export * from './models/knowledge.js';
 export * from './models/llm.js';
 export * from './models/session.js';
 export * from './models/project.js';
+export * from './redact-secrets.js';
 
 // Порты
 export * from './ports/secrets-vault.js';
