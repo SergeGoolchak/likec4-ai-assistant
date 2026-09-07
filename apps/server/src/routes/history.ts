@@ -107,6 +107,7 @@ function rollbackNotAvailableError(): UserFacingError {
     likelyCause: 'Эта сессия ещё не применена, либо уже была откачена ранее.',
     suggestedAction: 'Проверьте статус сессии на экране Apply, либо восстановите нужный снэпшот вручную из History.',
     retryable: false,
+    helpTopicId: 'field.rollback',
   };
 }
 

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { decideProposalItem, getSession, regenerateProposalItem } from '../api/client';
 import { Card } from '../components/Card';
 import { ProposalItemCard, type DecisionInput } from '../components/ProposalItemCard';
+import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
 
 export function ProposalPage() {
   const { id: sessionId } = useParams<{ id: string }>();
@@ -37,7 +38,10 @@ export function ProposalPage() {
         ← Назад к анализу
       </Link>
 
-      <h1 className="mt-2 text-2xl font-semibold text-slate-900">Предложения по изменению архитектуры</h1>
+      <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+        Предложения по изменению архитектуры
+        <HelpAnchor topicId="screen.proposal" />
+      </h1>
       <p className="mt-1 text-sm text-slate-500">
         Каждое предложение опирается на источники и объяснение — примите, отклоните, отредактируйте вручную или запросите
         перегенерацию. Pipeline продолжится, когда решение принято по каждому пункту.

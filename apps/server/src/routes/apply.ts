@@ -160,6 +160,7 @@ function blockedByValidationError(): UserFacingError {
     likelyCause: 'Есть техническая ошибка (Level 1) или неразрешённая архитектурная находка уровня "must" (Level 2).',
     suggestedAction: 'Вернитесь к экрану Preview/Diff и проверьте оставшиеся диагностики — Apply станет доступен, когда всё будет чисто.',
     retryable: false,
+    helpTopicId: 'field.apply-gate',
   };
 }
 
@@ -170,6 +171,7 @@ function fileConflictError(paths: string[]): UserFacingError {
     likelyCause: `Следующие файлы отличаются от того состояния, на основе которого строился анализ: ${paths.join(', ')}.`,
     suggestedAction: 'Запустите новый анализ на актуальном состоянии репозитория — Apply не перезаписывает чужие правки молча.',
     retryable: false,
+    helpTopicId: 'field.apply-gate',
   };
 }
 

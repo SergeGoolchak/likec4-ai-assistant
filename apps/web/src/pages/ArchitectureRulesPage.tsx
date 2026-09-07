@@ -11,6 +11,7 @@ import {
 } from '../api/client';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
+import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
 
 type RuleFormValue = {
   title: string;
@@ -105,7 +106,10 @@ export function ArchitectureRulesPage() {
       </Link>
 
       <div className="mt-2 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-900">Architecture Rules</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">
+          Architecture Rules
+          <HelpAnchor topicId="screen.architecture-rules" />
+        </h1>
         {editingRuleId === null && (
           <button
             type="button"
@@ -230,7 +234,10 @@ function RuleForm({
           required
         />
         <label className="block">
-          <span className="text-sm font-medium text-slate-700">Важность</span>
+          <span className="text-sm font-medium text-slate-700">
+            Важность
+            <HelpAnchor topicId="field.architecture-rule-severity" />
+          </span>
           <select
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
             value={form.severity}

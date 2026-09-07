@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { ApiError, createSession, getConfluenceSettings } from '../api/client';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
+import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
 
 export function NewTaskPage() {
   const { id: projectId } = useParams<{ id: string }>();
@@ -27,7 +28,10 @@ export function NewTaskPage() {
         ← Назад к проекту
       </Link>
 
-      <h1 className="mt-2 text-2xl font-semibold text-slate-900">Новая архитектурная задача</h1>
+      <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+        Новая архитектурная задача
+        <HelpAnchor topicId="screen.new-task" />
+      </h1>
       <p className="mt-1 text-sm text-slate-500">
         Укажите ID страницы Confluence с аналитической спецификацией — система прочитает существующую архитектуру и
         сопоставит её со спецификацией.
@@ -42,6 +46,7 @@ export function NewTaskPage() {
               likelyCause: 'Для этого проекта не настроено подключение к Confluence.',
               suggestedAction: 'Откройте настройки Confluence и сохраните адрес сервера и токен.',
               retryable: false,
+              helpTopicId: 'screen.confluence-settings',
             }}
           />
           <Link

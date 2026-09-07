@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, getConfluenceSettings, saveConfluenceSettings } from '../api/client';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
+import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
 
 export function ConfluenceSettingsPage() {
   const { id: projectId } = useParams<{ id: string }>();
@@ -35,7 +36,10 @@ export function ConfluenceSettingsPage() {
         ← Назад к проекту
       </Link>
 
-      <h1 className="mt-2 text-2xl font-semibold text-slate-900">Confluence</h1>
+      <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+        Confluence
+        <HelpAnchor topicId="screen.confluence-settings" />
+      </h1>
       <p className="mt-1 text-sm text-slate-500">
         Подключение к Confluence Server/Data Center по Personal Access Token. Используется для чтения аналитических
         спецификаций (read-only).
@@ -61,7 +65,10 @@ export function ConfluenceSettingsPage() {
           </label>
 
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Personal Access Token</span>
+            <span className="text-sm font-medium text-slate-700">
+              Personal Access Token
+              <HelpAnchor topicId="field.confluence-pat" />
+            </span>
             <input
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
               type="password"

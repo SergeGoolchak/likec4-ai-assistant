@@ -26,7 +26,7 @@ npm start
 ## Структура
 
 - `apps/server` — backend: HTTP API, SSE, оркестрация AI pipeline.
-- `apps/web` — React SPA.
+- `apps/web` — React SPA. `src/ui-kit/help` — реестр контекстной помощи (`HelpTopic`) + `<HelpAnchor>`; `src/ui-kit/onboarding` — декларативный 13-шаговый onboarding поверх того же реестра; экран `/help` (`HelpCenterPage`) рендерит и реестр, и markdown-документацию из `docs/user-guide/`.
 - `packages/core-domain` — доменные модели и порты (интерфейсы), от которых зависит весь остальной код. Остальные технологии-адаптеры появятся в `packages/*` по мере прохождения milestones.
 - `packages/secrets` — локальное шифрованное хранилище API-ключей/токенов.
 - `packages/likec4-adapter` — `LikeC4Parser`/`LikeC4Validator` поверх официального npm-пакета `likec4`: построение `ArchitectureGraph`, техническая валидация, рендер views в SVG.
@@ -51,7 +51,7 @@ npm run typecheck
 npm run test
 ```
 
-Тот же набор команд гоняется в CI на каждый push в `main` и на каждый PR (`.github/workflows/ci.yml`).
+Тот же набор команд гоняется в CI на каждый push в `main` и на каждый PR (`.github/workflows/ci.yml`). `npm run lint` включает `scripts/check-help-completeness.mjs` — проверяет, что каждый экран `apps/web/src/pages/*.tsx` содержит хотя бы один `<HelpAnchor>`, ссылающийся на реально существующую запись в реестре.
 
 ## Лицензия
 
