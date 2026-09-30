@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getSession } from '../api/client';
 import { Card } from '../components/Card';
+import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
 
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3];
 
@@ -31,7 +32,10 @@ export function PreviewPage() {
         ← Назад к сравнению
       </Link>
 
-      <h1 className="mt-2 text-2xl font-semibold text-slate-900">Превью диаграмм</h1>
+      <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+        Превью диаграмм
+        <HelpAnchor topicId="screen.preview" />
+      </h1>
       <p className="mt-1 text-sm text-slate-500">Итоговое состояние архитектуры — {views.length} {views.length === 1 ? 'диаграмма' : 'диаграмм'}.</p>
 
       {views.length === 0 && (

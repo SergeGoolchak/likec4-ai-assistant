@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { ApiError, createProject } from '../api/client';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
+import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
 
 export function CreateProjectPage() {
   const navigate = useNavigate();
@@ -18,7 +19,10 @@ export function CreateProjectPage() {
 
   return (
     <div className="max-w-lg">
-      <h1 className="text-2xl font-semibold text-slate-900">Новый проект</h1>
+      <h1 className="text-2xl font-semibold text-slate-900">
+        Новый проект
+        <HelpAnchor topicId="screen.create-project" />
+      </h1>
       <Card className="mt-6">
         <form
           className="space-y-4"

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { chmod, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FileSecretsVault } from './file-secrets-vault.js';
@@ -40,6 +40,31 @@ test('the secret value never appears in plaintext on disk', async () => {
     await vault.set('confluence.pat', secretValue);
     const onDisk = await readFile(join(dir, 'data', 'secrets.enc'), 'utf8');
     assert.equal(onDisk.includes(secretValue), false);
+  });
+});
+
+test('a failed write (Milestone 12: temp+rename) never corrupts an already-stored secret', async () => {
+  await withTempVault(async (vault, dir) => {
+    await vault.set('a', '1');
+    const dataDir = join(dir, 'data');
+    const before = await readFile(join(dataDir, 'secrets.enc'), 'utf8');
+
+    // Директория без права записи — writeFile временного файла (или последующий rename)
+    // упадёт, эмулируя обрыв процесса/диска посреди записи, без моков fs.
+    await chmod(dataDir, 0o500);
+    try {
+      await assert.rejects(() => vault.set('b', '2'));
+    } finally {
+      await chmod(dataDir, 0o700);
+    }
+
+    const after = await readFile(join(dataDir, 'secrets.enc'), 'utf8');
+    assert.equal(after, before, 'secrets.enc must be byte-for-byte unchanged after a failed write');
+    assert.equal(await vault.get('a'), '1', 'previously stored secret must still be readable');
+    assert.equal(await vault.get('b'), undefined, 'the failed write must not have partially applied');
+
+    const leftoverTempFiles = (await readdir(dataDir)).filter((name) => name.includes('.tmp-'));
+    assert.deepEqual(leftoverTempFiles, [], 'no leftover temp file after cleanup');
   });
 });
 

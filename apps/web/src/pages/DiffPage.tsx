@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getSession } from '../api/client';
 import { Card } from '../components/Card';
+import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
 import type { FileDiff } from '../api/types';
 
 const CHANGE_TYPE_LABEL: Record<FileDiff['changeType'], string> = {
@@ -37,7 +38,10 @@ export function DiffPage() {
         ← Назад к анализу
       </Link>
 
-      <h1 className="mt-2 text-2xl font-semibold text-slate-900">Сравнение изменений</h1>
+      <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+        Сравнение изменений
+        <HelpAnchor topicId="screen.diff" />
+      </h1>
       <p className="mt-1 text-sm text-slate-500">
         Файлы, которые изменит Apply — {diff.length} {diff.length === 1 ? 'файл' : 'файлов'}.
       </p>

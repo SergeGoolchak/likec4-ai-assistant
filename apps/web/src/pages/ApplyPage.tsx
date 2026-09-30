@@ -4,6 +4,7 @@ import { applySession, getSession, rollbackSession } from '../api/client';
 import { ApiError } from '../api/client';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
+import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
 
 export function ApplyPage() {
   const { id: sessionId } = useParams<{ id: string }>();
@@ -44,7 +45,10 @@ export function ApplyPage() {
         ← Назад к превью
       </Link>
 
-      <h1 className="mt-2 text-2xl font-semibold text-slate-900">Применение изменений</h1>
+      <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+        Применение изменений
+        <HelpAnchor topicId="screen.apply" />
+      </h1>
 
       <Card className="mt-6">
         <div className="grid grid-cols-3 gap-4">
@@ -56,6 +60,7 @@ export function ApplyPage() {
         {blocked && !applied && (
           <p className="mt-4 text-sm font-medium text-amber-700">
             Apply заблокирован: есть непройденная техническая или архитектурная валидация. Вернитесь к анализу, чтобы увидеть диагностики.
+            <HelpAnchor topicId="field.apply-gate" />
           </p>
         )}
 
@@ -74,13 +79,16 @@ export function ApplyPage() {
               {session.applyResult?.filesChanged.length}.
             </p>
             {session.applyResult?.rollbackAvailable && (
-              <button
-                onClick={() => rollbackMutation.mutate()}
-                disabled={rollbackMutation.isPending}
-                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-500 disabled:cursor-not-allowed disabled:bg-rose-300"
-              >
-                {rollbackMutation.isPending ? 'Откатываем…' : 'Rollback'}
-              </button>
+              <p>
+                <button
+                  onClick={() => rollbackMutation.mutate()}
+                  disabled={rollbackMutation.isPending}
+                  className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-500 disabled:cursor-not-allowed disabled:bg-rose-300"
+                >
+                  {rollbackMutation.isPending ? 'Откатываем…' : 'Rollback'}
+                </button>
+                <HelpAnchor topicId="field.rollback" />
+              </p>
             )}
             {rollbackMutation.isSuccess && <p className="text-sm text-slate-500">Откачено — файлы восстановлены до состояния перед Apply.</p>}
           </div>

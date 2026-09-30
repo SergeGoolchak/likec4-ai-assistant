@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ApiError, listProjects } from '../api/client';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
+import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
 
 export function ProjectsPage() {
   const { data, error, isLoading, refetch } = useQuery({ queryKey: ['projects'], queryFn: listProjects });
@@ -10,7 +11,10 @@ export function ProjectsPage() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-900">Проекты</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">
+          Проекты
+          <HelpAnchor topicId="screen.projects" />
+        </h1>
         <Link
           to="/projects/new"
           className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"

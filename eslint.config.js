@@ -13,4 +13,12 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
+  {
+    // Обычные Node-скрипты вне workspace-пакетов (например scripts/check-help-completeness.mjs)
+    // не проходят через tsconfig ни одного пакета — глобалы Node здесь не приходят автоматически.
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { console: 'readonly', process: 'readonly' },
+    },
+  },
 );

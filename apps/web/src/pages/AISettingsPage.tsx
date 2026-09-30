@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, getAISettings, saveAISettings } from '../api/client';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
+import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
 
 const DEFAULT_MODEL = 'gpt-4o-mini';
 
@@ -42,7 +43,10 @@ export function AISettingsPage() {
         ← Назад к проекту
       </Link>
 
-      <h1 className="mt-2 text-2xl font-semibold text-slate-900">AI-провайдер</h1>
+      <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+        AI-провайдер
+        <HelpAnchor topicId="screen.ai-settings" />
+      </h1>
       <p className="mt-1 text-sm text-slate-500">
         Подключение к OpenAI или любому OpenAI-совместимому серверу (Ollama, LM Studio, vLLM, llama.cpp server и
         т.п.) — достаточно указать его адрес ниже. Используется для извлечения требований из спецификации и
@@ -68,7 +72,10 @@ export function AISettingsPage() {
           </label>
 
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Адрес сервера (необязательно)</span>
+            <span className="text-sm font-medium text-slate-700">
+              Адрес сервера (необязательно)
+              <HelpAnchor topicId="field.ai-base-url" />
+            </span>
             <input
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
               value={baseUrl}

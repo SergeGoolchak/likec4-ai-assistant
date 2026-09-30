@@ -1,4 +1,4 @@
-import type { SessionHistoryStore, SessionRecord, UserFacingError, UserFacingStatus } from '@likec4-ai/core-domain';
+import { redactSecrets, type SessionHistoryStore, type SessionRecord, type UserFacingError, type UserFacingStatus } from '@likec4-ai/core-domain';
 import { loadConfluenceStage } from './stages/load-confluence.js';
 import { parseSpecificationStage } from './stages/parse-specification.js';
 import { loadLikeC4Stage } from './stages/load-likec4.js';
@@ -150,7 +150,11 @@ function pause(session: SessionRecord, stage: PipelineStageDef): SessionRecord {
 
 function fail(session: SessionRecord, stage: PipelineStageDef, err: unknown, durationMs: number): SessionRecord {
   const at = new Date().toISOString();
-  const message = err instanceof Error ? err.message : String(err);
+  // redactSecrets — defense-in-depth (риск №5, Milestone 12): сегодня ни один адаптер не кладёт
+  // секрет в текст исключения (проверено их собственными тестами), но это единственное место,
+  // через которое проходит вообще любая ошибка любой стадии — на него и полагаемся, а не на
+  // дисциплину каждого будущего адаптера.
+  const message = redactSecrets(err instanceof Error ? err.message : String(err));
   const error: UserFacingError = {
     id: `pipeline.${stage.id}.failed`,
     title: `Не удалось выполнить шаг "${stage.label}"`,

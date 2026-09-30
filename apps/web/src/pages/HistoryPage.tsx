@@ -4,6 +4,7 @@ import { getProjectHistory, restoreSnapshot } from '../api/client';
 import { ApiError } from '../api/client';
 import { Card } from '../components/Card';
 import { ErrorState } from '../components/ErrorState';
+import { HelpAnchor } from '../ui-kit/help/HelpAnchor';
 
 export function HistoryPage() {
   const { id: projectId } = useParams<{ id: string }>();
@@ -30,7 +31,10 @@ export function HistoryPage() {
         ← Назад к проекту
       </Link>
 
-      <h1 className="mt-2 text-2xl font-semibold text-slate-900">История</h1>
+      <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+        История
+        <HelpAnchor topicId="screen.history" />
+      </h1>
 
       <h2 className="mt-6 text-lg font-medium text-slate-900">Сессии анализа</h2>
       {data.sessions.length === 0 && <p className="mt-2 text-sm text-slate-500">Сессий пока не было.</p>}
